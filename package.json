@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5175",
+    "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "qr": "evenhub qr --http --port 5175",
+    "qr": "evenhub qr --http --port 5173",
     "pack": "npm run build && evenhub pack app.json dist -o glassist.ehpk"
   },
   "dependencies": {

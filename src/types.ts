@@ -4,12 +4,15 @@ export type HomeView = 'home' | 'today' | 'upcoming' | 'inbox' | 'all'
 
 export type STTProviderName = 'off' | 'soniox' | 'deepgram'
 
+export type Priority = 1 | 2 | 3 | 4 | 5
+
 export interface TodoTask {
   id: string
   title: string
   description?: string
   isCompleted: boolean
-  priority: 1 | 2 | 3 | 4
+  /** 1=low, 2=medium, 3=high, 4=urgent, 5=do-now. Undefined = no priority set. */
+  priority?: Priority
   dueDate?: string
   projectId?: string
   labels?: string[]
