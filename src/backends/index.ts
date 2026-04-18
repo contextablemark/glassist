@@ -1,13 +1,18 @@
 import type { GlassistSettings } from '../types'
 import type { TodoBackend } from './TodoBackend'
-import { TodoistBackend } from './TodoistBackend'
-import { VikunjaBackend } from './VikunjaBackend'
 
 export type { TodoBackend, TaskView } from './TodoBackend'
 
-export function makeBackend(settings: GlassistSettings): TodoBackend {
+/**
+ * Construct a backend for the current settings. The adapter modules are
+ * loaded dynamically so their (substantial) SDK dependencies land in
+ * separate chunks and stay out of the initial bundle.
+ */
+export async function makeBackend(settings: GlassistSettings): Promise<TodoBackend> {
   if (settings.backend === 'todoist') {
+    const { TodoistBackend } = await import('./TodoistBackend')
     return new TodoistBackend(settings.token)
   }
+  const { VikunjaBackend } = await import('./VikunjaBackend')
   return new VikunjaBackend(settings.token, settings.vikunjaBaseUrl)
 }

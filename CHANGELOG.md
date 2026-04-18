@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- `TodoistBackend` now uses the official `@doist/todoist-sdk` (v9.3.0) instead of hand-rolled REST: the SDK owns pagination, headers, and error shapes, and we stop maintaining them
+- `makeBackend` is now async — backend adapter modules are loaded via dynamic `import()` so the ~210 KB gz of SDK + zod lands in on-demand chunks instead of the initial bundle. First-load size stays at ~92 KB gz.
+- A `browserFetch` adapter wraps `window.fetch` to satisfy the SDK's `CustomFetchResponse` contract (headers normalized from `Headers` → `Record<string,string>`)
+
 ### Added
 - Glasses nav state machine with Home → List → Subtasks levels and per-frame cursor
 - Single-container rendering pipeline: `createStartUpPageContainer` once, `textContainerUpgrade` for every subsequent input (flicker-free)
