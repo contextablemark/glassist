@@ -1,0 +1,24 @@
+{
+  "package_id": "com.mefogle.glassist",
+  "edition": "202601",
+  "name": "Glassist",
+  "version": "0.1.0",
+  "min_app_version": "0.1.0",
+  "min_sdk_version": "0.0.9",
+  "tagline": "Your todos, at a glance",
+  "description": "Todoist and Vikunja tasks on your G2 glasses. Bring your own API token.",
+  "author": "mefogle",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Connect to Todoist, Vikunja, and speech-to-text providers",
+      "whitelist": ["*"]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Voice quick-add (optional, requires an STT API key)"
+    }
+  ],
+  "supported_languages": ["en"]
+}
