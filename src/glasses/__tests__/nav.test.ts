@@ -103,9 +103,13 @@ describe('Nav', () => {
     const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Inbox (first menu row)
-    const loading = expectStatus(nav.render())
-    expect(loading.text).toMatch(/Inbox/)
-    expect(loading.text).toMatch(/Loading…/)
+    // Loading now renders as a list-shaped scene (Back row + "Loading…"
+    // placeholder) to keep the drill-down transition 2→2 containers
+    // rather than 2→1→2, which the firmware rebuild doesn't handle.
+    const loading = expectList(nav.render())
+    expect(loading.header).toMatch(/Inbox/)
+    expect(loading.items[0]).toMatch(/Back/)
+    expect(loading.items[1]).toMatch(/Loading…/)
     await flush()
     // Empty list renders as a list scene with just the Back item + placeholder.
     const afterLoad = expectList(nav.render())
@@ -252,7 +256,7 @@ describe('Nav', () => {
     expect(scene.items[3]).toMatch(/All tasks.*\(1\)/)
   })
 
-  it('tasks known to be parents render with ▶ instead of a due label', async () => {
+  it('tasks known to be parents render with > instead of a due label', async () => {
     const parent = task('p', 'Plan trip', { dueDate: new Date().toISOString() })
     const child = task('c', 'Book flights', { parentId: 'p' })
     backend.getTasks.mockImplementation(async (view: TaskView) => {
@@ -267,7 +271,7 @@ describe('Nav', () => {
     await flush()
     const scene = expectList(nav.render())
     const planterLine = scene.items.find((l) => l.includes('Plan trip')) ?? ''
-    expect(planterLine).toMatch(/▶/)
+    expect(planterLine).toMatch(/>/)
     expect(planterLine).not.toMatch(/today/)
   })
 

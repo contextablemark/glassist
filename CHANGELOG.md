@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-04-19
+
+### Fixed
+
+- **Spotty initial paint on hardware re-entry.** `createStartUpPageContainer` is one-shot per glasses UI session — when the Even Hub WebView is re-entered (foreground re-enter, manual reload, HMR in dev), the page container persists on the glasses and the subsequent `createStartUpPageContainer` call returns `StartUpPageCreateResult=1` (invalid). The paint was giving up at that point and leaving the display stuck. We now fall back to `rebuildPageContainer` with the same payload when create returns non-success; the pre-existing container is reused and the new scene renders.
+- **Drill-down rebuild rejected on hardware for any view containing a parent task.** The parent-indicator glyph `▶` (U+25B6, 3 bytes UTF-8) combined with a multi-byte priority glyph in the same `itemName` row pushed the row to 64 bytes at `LINE_WIDTH=60`, hitting the firmware's itemName byte ceiling. Upcoming was the only view reliably working because its items never carried a parent indicator. Swapped the parent marker to ASCII `>` so no row ever packs two multi-byte glyphs into the same itemName. Glass-transit uses `▶` without issue because it writes into `TextContainerProperty.content`, which has a much larger (1000-char) budget — different field, different validator.
+- **Bridge return-code semantics were inverted** in the 0.2.2 diagnostic code. `createStartUpPageContainer` returns a `StartUpPageCreateResult` enum where **`0` = success** (not `1`); `rebuildPageContainer` returns a plain boolean. The old `isBridgeSuccess(result === 1 || result === true)` helper was labelling SDK-successful creates as failures and vice versa, firing spurious ERROR scenes on healthy boots. Split into `isCreateSuccess` / `isRebuildSuccess` keyed off the SDK docs, and added `describeCreateResult` to surface the enum name (`invalid` / `oversize` / `outOfMemory`) in the devLog.
+
+### Changed
+
+- **Loading and error scenes inside list / subtasks frames now render as list-shaped scenes** (header + ListContainer with placeholder or error rows) instead of single-TextContainer status scenes. Drill-down transitions are now 2→2 container rebuilds across the whole flow (Home → Loading → List → Error → retry) instead of 2→1→2. The firmware's `rebuildPageContainer` appears to handle consistent-shape rebuilds more reliably than shape changes.
+
 ## [0.2.2] — 2026-04-19
 
 ### Changed

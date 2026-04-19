@@ -24,7 +24,10 @@ function buildGlyphSlot(task: TodoTask): string {
  * one selectable row; the firmware paints its own selection border.
  *
  * Trailing rules:
- *   - If the task is a known parent: ▶
+ *   - If the task is a known parent: `>` (ASCII; the U+25B6 glyph we were
+ *     using previously appears to be absent from the firmware font — views
+ *     containing a parent row had their rebuildPageContainer rejected.
+ *     Testing plain ASCII to confirm the glyph is the cause.)
  *   - Else: compact due label (may be empty)
  */
 export function renderListItems(args: {
@@ -34,7 +37,7 @@ export function renderListItems(args: {
   return args.tasks.map((task) => {
     const glyphSlot = buildGlyphSlot(task)
     const isParent = args.knownParentIds?.has(task.id) ?? false
-    const trailing = isParent ? '▶' : formatDue(task.dueDate)
+    const trailing = isParent ? '>' : formatDue(task.dueDate)
     return renderTaskLine({
       glyphSlot,
       title: task.title,

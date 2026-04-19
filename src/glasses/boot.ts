@@ -11,7 +11,13 @@ import type { EvenAppBridge } from '@evenrealities/even_hub_sdk'
 import { makeBackend, type TodoBackend } from '../backends'
 import { getSettings, SETTINGS_CHANGED_EVENT } from '../lib/storage'
 import type { GlassistSettings } from '../types'
-import { isBridgeSuccess, Nav, type Scene } from './nav'
+import {
+  describeCreateResult,
+  isCreateSuccess,
+  isRebuildSuccess,
+  Nav,
+  type Scene,
+} from './nav'
 import { setupInput } from './input'
 
 function devLog(msg: string): void {
@@ -169,7 +175,12 @@ function containersForScene(scene: Scene): {
     containerName: 'list',
     itemContainer: new ListItemContainerProperty({
       itemCount: scene.items.length,
-      itemWidth: DISPLAY_W,
+      // SDK README:906 — `itemWidth: 0` = auto-fill. Passing the full
+      // container width (576) here exceeded the effective usable width
+      // (576 − 2×paddingLength = 568) and the firmware rejected the
+      // payload with StartUpPageCreateResult=1 (invalid). Auto-fill
+      // lets the SDK compute the right width.
+      itemWidth: 0,
       isItemSelectBorderEn: 1,
       itemName: scene.items,
     }),
@@ -318,17 +329,39 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
     }
 
     if (lastScene === null) {
+      // Per SDK: createStartUpPageContainer may only be called once per
+      // glasses UI session — on re-entry (WebView re-open, HMR reload)
+      // the page container persists and subsequent create calls return
+      // `invalid`. Fall back to rebuildPageContainer with the same
+      // payload, which operates on the existing container just fine.
       try {
-        const result = await bridge.createStartUpPageContainer(
+        const createResult = await bridge.createStartUpPageContainer(
           new CreateStartUpPageContainer({
             containerTotalNum,
             textObject,
             listObject,
           }),
         )
-        devLog(`createStartUpPageContainer result: ${result}`)
-        if (!isBridgeSuccess(result)) {
-          nav.reportBridgeError(`createStartUpPageContainer returned ${result}`)
+        if (isCreateSuccess(createResult)) {
+          devLog('createStartUpPageContainer: success (fresh container)')
+        } else {
+          const detail = describeCreateResult(createResult)
+          devLog(`createStartUpPageContainer → ${detail}, falling back to rebuild`)
+          const rebuildResult = await bridge.rebuildPageContainer(
+            new RebuildPageContainer({
+              containerTotalNum,
+              textObject,
+              listObject,
+            }),
+          )
+          if (!isRebuildSuccess(rebuildResult)) {
+            devLog(`fallback rebuildPageContainer failed: ${rebuildResult}`)
+            nav.reportBridgeError(
+              `initial paint: create=${detail}, rebuild=${rebuildResult}`,
+            )
+          } else {
+            devLog('fallback rebuildPageContainer: success (reused container)')
+          }
         }
       } catch (err) {
         devLog(`createStartUpPageContainer ERROR: ${err}`)
@@ -337,6 +370,9 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
         )
       }
     } else {
+      // Per SDK: rebuildPageContainer returns Promise<boolean>; false is a
+      // silent failure that would otherwise leave the on-glass display
+      // stuck on the prior scene.
       try {
         const result = await bridge.rebuildPageContainer(
           new RebuildPageContainer({
@@ -345,14 +381,9 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
             listObject,
           }),
         )
-        // The bridge returns `true` on success for rebuildPageContainer
-        // (unlike createStartUpPageContainer which returns 1). Anything
-        // else is a silent failure that would otherwise leave the
-        // on-glass display stuck on the prior scene — surface it through
-        // Nav so the user sees a tap-to-retry ERROR screen.
-        if (!isBridgeSuccess(result)) {
-          devLog(`rebuildPageContainer result: ${result}`)
-          nav.reportBridgeError(`rebuildPageContainer returned ${result}`)
+        if (!isRebuildSuccess(result)) {
+          devLog(`rebuildPageContainer failed: returned ${result}`)
+          nav.reportBridgeError(`rebuild returned ${result}`)
         }
       } catch (err) {
         devLog(`rebuildPageContainer ERROR: ${err}`)

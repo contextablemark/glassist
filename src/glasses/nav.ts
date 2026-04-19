@@ -87,8 +87,30 @@ export interface NavOptions {
   log?: (msg: string) => void
 }
 
-export function isBridgeSuccess(result: unknown): boolean {
-  return result === true || result === 1
+/**
+ * Per SDK README: `createStartUpPageContainer` returns a
+ * `StartUpPageCreateResult` enum where 0 = success and 1/2/3 are
+ * failure codes (invalid / oversize / outOfMemory). `rebuildPageContainer`
+ * returns a plain boolean. Separate helpers per call so we stop
+ * mis-labeling success as failure (and vice versa).
+ */
+export function isCreateSuccess(result: unknown): boolean {
+  return result === 0
+}
+
+export function isRebuildSuccess(result: unknown): boolean {
+  return result === true
+}
+
+/** Map a create-call result code to the enum name. */
+export function describeCreateResult(result: unknown): string {
+  switch (result) {
+    case 0: return 'success'
+    case 1: return 'invalid'
+    case 2: return 'oversize'
+    case 3: return 'outOfMemory'
+    default: return `unknown(${result})`
+  }
 }
 
 export class Nav {
@@ -154,6 +176,18 @@ export class Nav {
       }
     }
     if (this.error) {
+      // Render errors in a shape compatible with the underlying frame.
+      // For list / subtasks frames we stay in a 2-container list layout
+      // so tap-to-retry's subsequent paints are 2→2 rebuilds, not
+      // 2→1→2. See the tasks===null branch below for the same logic.
+      const f = this.top
+      if (f.kind === 'list' || f.kind === 'subtasks') {
+        return {
+          kind: 'list',
+          header: renderHeader('ERROR'),
+          items: [BACK_ITEM_LABEL, `  ${this.error.message}`, '  Tap to retry.'],
+        }
+      }
       return {
         kind: 'status',
         text: renderStatusText('ERROR', `${this.error.message}\nTap to retry.`),
@@ -180,10 +214,14 @@ export class Nav {
       }
     }
     if (f.tasks === null) {
+      // Render loading as a list-shaped scene so drill-down is a 2→2
+      // container transition (header + list) rather than 2→1→2. The
+      // firmware's rebuildPageContainer appears to fail on container-
+      // count changes — keeping the shape constant sidesteps that.
       return {
-        kind: 'status',
-        text: renderStatusText(f.title, 'Loading…'),
-        dismissible: false,
+        kind: 'list',
+        header: renderHeader(this.toast ?? f.title),
+        items: [BACK_ITEM_LABEL, '  Loading…'],
       }
     }
     const headerText = renderHeader(this.toast ?? f.title)
