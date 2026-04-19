@@ -14,5 +14,9 @@ export async function makeBackend(settings: GlassistSettings): Promise<TodoBacke
     return new TodoistBackend(settings.token)
   }
   const { VikunjaBackend } = await import('./VikunjaBackend')
-  return new VikunjaBackend(settings.token, settings.vikunjaBaseUrl)
+  return new VikunjaBackend(
+    settings.token,
+    settings.vikunjaBaseUrl,
+    settings.vikunjaProxyUrl,
+  )
 }

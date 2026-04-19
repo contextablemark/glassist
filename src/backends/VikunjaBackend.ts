@@ -43,6 +43,8 @@ export class VikunjaBackend implements TodoBackend {
   constructor(
     private readonly token: string,
     private readonly baseUrl: string,
+    /** Optional CORS-relay worker URL. Overrides dev proxy and direct baseUrl when set. */
+    private readonly proxyUrl: string = '',
     /** Test-only injection hook. */
     private readonly fetchImpl: typeof fetch = (url, init) => fetch(url, init),
   ) {}
@@ -50,10 +52,16 @@ export class VikunjaBackend implements TodoBackend {
   // ── transport ───────────────────────────────────────────────────────────
 
   private apiRoot(): string {
-    // Dev builds route through the Vite /vikunja-proxy middleware to dodge
-    // Vikunja Cloud's CORS allowlist (which blocks LAN IPs used for QR
-    // sideloading). Production hits the user-configured URL directly.
+    // A user-configured proxy wins everywhere — dev, prod, on-glass, on
+    // Vercel. It's how production .ehpk builds talk to Vikunja Cloud
+    // without running afoul of its CORS allowlist.
+    const trimmed = this.proxyUrl.trim().replace(/\/+$/, '')
+    if (trimmed) return `${trimmed}/api/v1`
+    // Fall back to the Vite middleware in dev so the desktop browser
+    // and QR-sideloaded phone both work without a deployed proxy.
     if (import.meta.env.DEV) return '/vikunja-proxy/api/v1'
+    // Production without a proxy: hit Vikunja directly. Self-hosted
+    // users with permissive CORS land here.
     return normalizeBaseUrl(this.baseUrl)
   }
 

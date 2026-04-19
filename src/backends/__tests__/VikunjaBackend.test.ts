@@ -21,7 +21,12 @@ function jsonResponse(status: number, body: unknown): Response {
 
 function setup() {
   const fetchSpy = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-  const backend = new VikunjaBackend('tk_test', 'https://vkj.local', fetchSpy)
+  const backend = new VikunjaBackend(
+    'tk_test',
+    'https://vkj.local',
+    '', // no proxy — direct
+    fetchSpy,
+  )
   return { backend, fetchSpy }
 }
 
@@ -74,7 +79,7 @@ describe('VikunjaBackend', () => {
   })
 
   it('testConnection returns ok:false with no token (no fetch)', async () => {
-    const b = new VikunjaBackend('', 'https://vkj.local', fetchSpy)
+    const b = new VikunjaBackend('', 'https://vkj.local', '', fetchSpy)
     const result = await b.testConnection()
     expect(result).toEqual({ ok: false, error: 'No token' })
     expect(fetchSpy).not.toHaveBeenCalled()
@@ -281,6 +286,40 @@ describe('VikunjaBackend', () => {
     const [url, init] = fetchSpy.mock.calls[0]
     expect(url).toBe(`${API}/tasks/42`)
     expect(init?.method).toBe('DELETE')
+  })
+})
+
+describe('VikunjaBackend — proxy routing', () => {
+  it('routes through the configured proxy URL when set (overrides dev middleware)', async () => {
+    const fetchSpy = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >()
+    fetchSpy.mockResolvedValueOnce(jsonResponse(200, []))
+    const backend = new VikunjaBackend(
+      'tk_test',
+      'https://app.vikunja.cloud',
+      'https://my-relay.workers.dev',
+      fetchSpy,
+    )
+    await backend.getTasks('all')
+    const [url] = fetchSpy.mock.calls[0]
+    expect(String(url)).toMatch(/^https:\/\/my-relay\.workers\.dev\/api\/v1\/tasks\?/)
+  })
+
+  it('trims trailing slashes on the proxy URL before appending /api/v1', async () => {
+    const fetchSpy = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >()
+    fetchSpy.mockResolvedValueOnce(jsonResponse(200, []))
+    const backend = new VikunjaBackend(
+      'tk_test',
+      'https://app.vikunja.cloud',
+      'https://my-relay.workers.dev/', // trailing slash
+      fetchSpy,
+    )
+    await backend.getTasks('all')
+    const [url] = fetchSpy.mock.calls[0]
+    expect(String(url)).toMatch(/^https:\/\/my-relay\.workers\.dev\/api\/v1\/tasks\?/)
   })
 })
 

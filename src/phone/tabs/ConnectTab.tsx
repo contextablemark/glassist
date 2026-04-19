@@ -95,15 +95,33 @@ export function ConnectTab() {
         </Field>
 
         {isVikunja && (
-          <Field label="Base URL">
-            <input
-              type="url"
-              value={settings.vikunjaBaseUrl}
-              onChange={(e) => update('vikunjaBaseUrl', e.target.value)}
-              placeholder="https://app.vikunja.cloud"
-              className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono"
-            />
-          </Field>
+          <>
+            <Field label="Base URL">
+              <input
+                type="url"
+                value={settings.vikunjaBaseUrl}
+                onChange={(e) => update('vikunjaBaseUrl', e.target.value)}
+                placeholder="https://app.vikunja.cloud"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono"
+              />
+            </Field>
+            <Field label="CORS proxy URL (optional)">
+              <input
+                type="url"
+                value={settings.vikunjaProxyUrl}
+                onChange={(e) => update('vikunjaProxyUrl', e.target.value)}
+                placeholder="https://glassist-vikunja-proxy.workers.dev"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono"
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                Vikunja Cloud blocks cross-origin requests from non-localhost
+                origins, so packaged builds need a relay. Deploy{' '}
+                <span className="font-mono">proxy/</span> in this repo or use
+                a community Worker. Leave blank if your Vikunja has
+                permissive <span className="font-mono">cors.origins</span>.
+              </p>
+            </Field>
+          </>
         )}
 
         <div className="flex items-center gap-3">

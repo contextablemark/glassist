@@ -3,3 +3,5 @@ dist/
 *.ehpk
 .env
 .vercel
+proxy/node_modules/
+proxy/.wrangler/

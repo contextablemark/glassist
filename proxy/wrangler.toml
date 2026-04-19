@@ -1,0 +1,10 @@
+name = "glassist-vikunja-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Optional: point at a non-Cloud Vikunja instance. Defaults to
+# https://app.vikunja.cloud when unset.
+#   wrangler secret put UPSTREAM
+#   (or set [vars] below for a non-secret default that gets bundled in source)
+# [vars]
+# UPSTREAM = "https://my-vikunja.example.com"
