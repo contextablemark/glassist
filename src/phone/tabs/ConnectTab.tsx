@@ -105,19 +105,19 @@ export function ConnectTab() {
                 className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono"
               />
             </Field>
-            <Field label="CORS proxy URL (optional)">
+            <Field label="CORS proxy URL">
               <input
                 type="url"
                 value={settings.vikunjaProxyUrl}
                 onChange={(e) => update('vikunjaProxyUrl', e.target.value)}
-                placeholder="https://glassist-vikunja-proxy.workers.dev"
+                placeholder="Leave blank to hit Vikunja directly"
                 className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono"
               />
               <p className="text-xs text-neutral-500 mt-1">
-                Vikunja Cloud blocks cross-origin requests from non-localhost
-                origins, so packaged builds need a relay. Deploy{' '}
-                <span className="font-mono">proxy/</span> in this repo or use
-                a community Worker. Leave blank if your Vikunja has
+                Defaults to the community Cloudflare Worker so Vikunja Cloud
+                works from any origin out of the box. Replace with your own
+                relay (see <span className="font-mono">proxy/</span>), or
+                clear the field if you're using self-hosted Vikunja with
                 permissive <span className="font-mono">cors.origins</span>.
               </p>
             </Field>

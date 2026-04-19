@@ -1,5 +1,13 @@
 export type BackendName = 'todoist' | 'vikunja'
 
+/**
+ * Pre-configured Cloudflare Worker that forwards to app.vikunja.cloud
+ * with permissive CORS. Any user can paste their own worker URL into
+ * the Connect tab to override; clearing the field falls back to this.
+ */
+export const COMMUNITY_VIKUNJA_PROXY_URL =
+  'https://glassist-vikunja-proxy.mark-83e.workers.dev'
+
 export type HomeView = 'home' | 'today' | 'upcoming' | 'inbox' | 'all'
 
 export type STTProviderName = 'off' | 'soniox' | 'deepgram'
@@ -49,7 +57,7 @@ export const DEFAULT_SETTINGS: GlassistSettings = {
   backend: 'todoist',
   token: '',
   vikunjaBaseUrl: 'https://app.vikunja.cloud',
-  vikunjaProxyUrl: '',
+  vikunjaProxyUrl: COMMUNITY_VIKUNJA_PROXY_URL,
   defaultHomeView: 'home',
   itemsPerPage: 9,
   stt: {
