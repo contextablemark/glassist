@@ -196,7 +196,32 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
   let lastScene: Scene | null = null
   let lastLayout: Layout | null = null
 
+  // Coalesce concurrent paint() calls. Without this, every loadHomeCounts
+  // tick fires a change() → paint() in parallel before the first paint
+  // has had a chance to set `lastScene`, so N concurrent callers all take
+  // the "first paint" branch and hit createStartUpPageContainer N times.
+  // We collapse mid-flight scenes so only the most recent one reaches
+  // the bridge, and we always await the previous paint before starting
+  // the next.
+  let pendingScene: Scene | null = null
+  let painting = false
+
   async function paint(scene: Scene): Promise<void> {
+    pendingScene = scene
+    if (painting) return
+    painting = true
+    try {
+      while (pendingScene) {
+        const next = pendingScene
+        pendingScene = null
+        await paintOnce(next)
+      }
+    } finally {
+      painting = false
+    }
+  }
+
+  async function paintOnce(scene: Scene): Promise<void> {
     const { containerTotalNum, textObject, listObject, layout } =
       containersForScene(scene)
 
