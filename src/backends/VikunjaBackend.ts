@@ -271,8 +271,18 @@ export function normalizeBaseUrl(url: string): string {
 
 export function filterForView(view: 'today' | 'upcoming' | 'all'): string | undefined {
   if (view === 'all') return 'done = false'
-  if (view === 'today') return 'done = false && due_date <= now'
-  if (view === 'upcoming') return 'done = false && due_date > now'
+  // `now/d+1d` is Vikunja's date-math idiom for the start of tomorrow.
+  // Anchoring the boundary at midnight (not the current instant) keeps
+  // a task due at 23:00 local in Today instead of sliding it into
+  // Upcoming. Today also sweeps in overdue tasks, matching the Todoist
+  // `today | overdue` convention we use in that adapter.
+  //
+  // The extra `due_date > 1970-01-01` clamp filters out Vikunja's
+  // zero-value sentinel (0001-01-01) so undated tasks don't appear in
+  // Today (they pass `due_date < now/d+1d` on their own).
+  if (view === 'today')
+    return 'done = false && due_date > 1970-01-01 && due_date < now/d+1d'
+  if (view === 'upcoming') return 'done = false && due_date >= now/d+1d'
   return undefined
 }
 

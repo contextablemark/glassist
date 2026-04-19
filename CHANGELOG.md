@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-04-19
+
+### Fixed
+
+- **Concurrent `paint()` race on initial load.** Each of the four parallel `loadHomeCounts` fetches triggered a `change()` → `paint()`, and every caller saw `lastScene === null` (that field only updated after the await). Result: `createStartUpPageContainer` was called 5× in parallel, and whichever scene bound last landed on the display — often the initial empty-counts render. `paint()` now coalesces through a single worker loop and drops intermediate scenes.
+- **Vikunja Today/Upcoming boundary.** `due_date <= now` excluded tasks due later today (e.g. at 23:00 local), sliding them into Upcoming. Switched to `due_date < now/d+1d` for Today and `due_date >= now/d+1d` for Upcoming, anchoring the boundary at midnight. Today filter also includes a `due_date > 1970-01-01` clamp so Vikunja's zero-value date sentinel doesn't leak undated tasks into Today.
+- **Error display stability.** `Nav.setError` now first-error-wins — four parallel fetches can't stomp on each other before the user reads the root cause. Messages are flattened (newlines collapsed) and bounded to 200 chars so a stack trace no longer scrolls the status container off-screen. `Error.name` is included when non-generic.
+
+### Changed
+
+- **Line width bumped 38 → 60.** The firmware's proportional font left ~40% of the 576 px display unused at 38 chars; 60 pushes trailing labels (due dates, parent counts, etc.) close to the right edge without clipping wide-character titles in the samples tested.
+- **DemoBackend `all` view returns subtasks** alongside top-level tasks, matching the Todoist/Vikunja payload shape. Nav filters to top-level for the count and harvests parent IDs from the same payload — demo-2 ("Try voice quick-add") now renders with its ▶ chevron.
+
+### Added
+
+- **`Nav` logger callback** (wired from boot.ts → Vite dev `/dev-log`) for loadHomeCounts error telemetry. Useful when diagnosing backend failures without rebuilding.
+
 ## [0.2.0] — 2026-04-19
 
 ### Added

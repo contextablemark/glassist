@@ -338,7 +338,6 @@ export class Nav {
     if (!backend) return
     const home = this.stack[0]
     if (home.kind !== 'home') return
-    this.log(`loadHomeCounts start (backend=${backend.name})`)
     const views: HomeId[] = ['today', 'upcoming', 'inbox', 'all']
     await Promise.all(
       views.map(async (view) => {
@@ -355,7 +354,6 @@ export class Nav {
           const topLevel = page.tasks.filter((t) => !t.parentId)
           home.counts = { ...home.counts, [view]: topLevel.length }
           home.hasMore = { ...home.hasMore, [view]: page.hasMore }
-          this.log(`loadHomeCounts ${view}=${topLevel.length}${page.hasMore ? '+' : ''}`)
           this.change()
         } catch (err) {
           this.log(`loadHomeCounts ${view} ERROR: ${describeError(err)}`)

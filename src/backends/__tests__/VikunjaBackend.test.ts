@@ -124,22 +124,22 @@ describe('VikunjaBackend', () => {
     expect(url).not.toContain('filter=done+')
   })
 
-  it('getTasks("today") adds due_date<=now', async () => {
+  it('getTasks("today") uses start-of-tomorrow as upper bound', async () => {
     fetchSpy.mockResolvedValueOnce(jsonResponse(200, TASKS_FIXTURE))
     await backend.getTasks('today')
     const [url] = fetchSpy.mock.calls[0]
     expect(decodeURIComponent(String(url))).toContain(
-      'filter=done = false && due_date <= now',
+      'filter=done = false && due_date > 1970-01-01 && due_date < now/d+1d',
     )
     expect(url).toContain('filter_include_nulls=false')
   })
 
-  it('getTasks("upcoming") uses due_date>now', async () => {
+  it('getTasks("upcoming") starts strictly at tomorrow', async () => {
     fetchSpy.mockResolvedValueOnce(jsonResponse(200, TASKS_FIXTURE))
     await backend.getTasks('upcoming')
     const [url] = fetchSpy.mock.calls[0]
     expect(decodeURIComponent(String(url))).toContain(
-      'filter=done = false && due_date > now',
+      'filter=done = false && due_date >= now/d+1d',
     )
   })
 
@@ -347,7 +347,11 @@ describe('normalizeBaseUrl', () => {
 describe('filterForView', () => {
   it('returns correct filter strings', () => {
     expect(filterForView('all')).toBe('done = false')
-    expect(filterForView('today')).toBe('done = false && due_date <= now')
-    expect(filterForView('upcoming')).toBe('done = false && due_date > now')
+    expect(filterForView('today')).toBe(
+      'done = false && due_date > 1970-01-01 && due_date < now/d+1d',
+    )
+    expect(filterForView('upcoming')).toBe(
+      'done = false && due_date >= now/d+1d',
+    )
   })
 })

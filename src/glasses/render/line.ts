@@ -1,4 +1,8 @@
-export const LINE_WIDTH = 38
+// Char budget per list/header row. The firmware font is proportional,
+// so this is approximate — we want the padded title to reach close to
+// the right edge of the 576 px display without clipping the trailing
+// label. Tune down if wide-character titles clip on-glass.
+export const LINE_WIDTH = 60
 
 function padOrTruncate(s: string, width: number): string {
   if (s.length > width) return s.slice(0, width)
