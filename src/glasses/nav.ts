@@ -1,17 +1,22 @@
-import type { TodoTask } from '../types'
+import type { EvenAppBridge } from '@evenrealities/even_hub_sdk'
+import type { GlassistSettings, TodoTask } from '../types'
 import type { TaskView, TodoBackend } from '../backends'
 import { renderHomeItems, type HomeMenuItem } from './render/home'
 import { renderHeader, renderListItems } from './render/list'
 import { renderStatusText } from './render/status'
+import { STTSession } from './stt'
 
 type HomeId = Extract<TaskView, 'today' | 'upcoming' | 'inbox' | 'all'>
 
 const HOME_MENU: { id: HomeId; label: string }[] = [
+  { id: 'inbox', label: 'Inbox' },
   { id: 'today', label: 'Today' },
   { id: 'upcoming', label: 'Upcoming' },
-  { id: 'inbox', label: 'Inbox' },
   { id: 'all', label: 'All tasks' },
 ]
+
+/** Displayed as the voice quick-add row on Home when STT is enabled. */
+const SPEAK_ROW_LABEL = '+ Speak a task'
 
 // SDK limit is 20 items per ListContainer; we truncate lists that exceed
 // this cap in v1. Longer lists surface as "+" on the home count.
@@ -50,26 +55,40 @@ interface SubtasksFrame {
   completedInSession: Set<string>
 }
 
-type Frame = HomeFrame | ListFrame | SubtasksFrame
+interface ListeningFrame {
+  kind: 'listening'
+  body: string
+  /** Target project for the created task; stamped at entry time. */
+  projectId?: string
+}
+
+type Frame = HomeFrame | ListFrame | SubtasksFrame | ListeningFrame
 
 /**
  * Scene: the visual state Nav wants painted. boot.ts converts this to
  * SDK container primitives.
  *
- * - `status`  → a single TextContainer covering the screen
- * - `list`    → optional TextContainer header + ListContainer
+ * - `status`    → a single TextContainer covering the screen
+ * - `list`      → optional TextContainer header + ListContainer
+ * - `listening` → title TextContainer + body TextContainer (voice dictation)
  */
 export type Scene =
   | { kind: 'status'; text: string; dismissible: boolean }
   | { kind: 'list'; header: string | null; items: string[] }
+  | { kind: 'listening'; title: string; body: string }
 
 export interface NavOptions {
   backend: TodoBackend | null
+  settings: GlassistSettings
+  /** Required for voice quick-add; `null` in phone-only mode. */
+  bridge?: EvenAppBridge | null
   onChange?: () => void
 }
 
 export class Nav {
   private backend: TodoBackend | null
+  private settings: GlassistSettings
+  private bridge: EvenAppBridge | null
   private onChange?: () => void
   private stack: Frame[]
   private error: { message: string } | null = null
@@ -79,9 +98,13 @@ export class Nav {
   // always scoped to the current frame (cleared on navigation).
   private toast: string | null = null
   private toastTimer: ReturnType<typeof setTimeout> | null = null
+  // Live STT session when a ListeningFrame is on top of the stack.
+  private sttSession: STTSession | null = null
 
   constructor(options: NavOptions) {
     this.backend = options.backend
+    this.settings = options.settings
+    this.bridge = options.bridge ?? null
     this.onChange = options.onChange
     this.stack = [blankHome()]
     if (this.backend) void this.loadHomeCounts()
@@ -93,7 +116,19 @@ export class Nav {
     this.error = null
     this.knownParentIds = new Set()
     this.clearToast()
+    this.cancelSttSession()
     if (this.backend) void this.loadHomeCounts()
+    this.change()
+  }
+
+  /**
+   * Update settings without resetting navigation. Used when the user
+   * changes voice settings on the phone — the Home menu may gain/lose
+   * the "+ Speak a task" row, but the current list position shouldn't
+   * be disturbed.
+   */
+  setSettings(settings: GlassistSettings): void {
+    this.settings = settings
     this.change()
   }
 
@@ -119,10 +154,21 @@ export class Nav {
     }
     const f = this.top
     if (f.kind === 'home') {
+      const menuItems = renderHomeItems(this.homeMenuItems(f))
+      const items = this.isVoiceAvailable()
+        ? [SPEAK_ROW_LABEL, ...menuItems]
+        : menuItems
       return {
         kind: 'list',
-        header: renderHeader('Glassist'),
-        items: renderHomeItems(this.homeMenuItems(f)),
+        header: renderHeader(this.toast ?? 'Glassist'),
+        items,
+      }
+    }
+    if (f.kind === 'listening') {
+      return {
+        kind: 'listening',
+        title: this.toast ?? 'Listening',
+        body: f.body,
       }
     }
     if (f.tasks === null) {
@@ -162,6 +208,14 @@ export class Nav {
     }))
   }
 
+  private isVoiceAvailable(): boolean {
+    return (
+      !!this.bridge &&
+      this.settings.stt.provider !== 'off' &&
+      this.settings.stt.apiKey.trim().length > 0
+    )
+  }
+
   // ── input handling ─────────────────────────────────────────────────────
 
   /**
@@ -185,7 +239,15 @@ export class Nav {
     const f = this.top
     if (f.kind === 'home') {
       if (itemIndex === undefined) return
-      const entry = HOME_MENU[itemIndex]
+      const voiceOn = this.isVoiceAvailable()
+      // Speak-a-task row is the first item when voice is on; the four
+      // view entries shift down by one.
+      if (voiceOn && itemIndex === 0) {
+        void this.startListening()
+        return
+      }
+      const menuIndex = voiceOn ? itemIndex - 1 : itemIndex
+      const entry = HOME_MENU[menuIndex]
       if (!entry) return
       this.stack.push({
         kind: 'list',
@@ -198,12 +260,16 @@ export class Nav {
       void this.loadList()
       return
     }
+    if (f.kind === 'listening') {
+      // Tap → submit whatever we have so far (bypass VAD).
+      this.sttSession?.submit()
+      return
+    }
     // In list/subtasks scenes, index 0 is the synthetic "▲ Back" item;
     // task indices shift by 1.
     if (itemIndex === 0) {
       this.clearToast()
-      this.stack.pop()
-      this.change()
+      this.popFrame()
       return
     }
     if (f.tasks === null) return
@@ -230,11 +296,30 @@ export class Nav {
   /** SCROLL_TOP_EVENT: swipe up past the first item — pop the level. */
   onScrollUp(): void {
     if (!this.backend || this.error) return
+    // During dictation, swipe-up cancels and returns to Home.
+    if (this.top.kind === 'listening') {
+      this.cancelSttSession()
+      this.popFrame()
+      return
+    }
     if (this.stack.length > 1) {
       this.clearToast()
-      this.stack.pop()
-      this.change()
+      this.popFrame()
     }
+  }
+
+  /**
+   * Pop the top frame and re-render. When the pop leaves Home at the top,
+   * refresh counts so the menu reflects any completions / additions made
+   * in the level we just left.
+   */
+  private popFrame(): void {
+    if (this.stack.length <= 1) return
+    this.stack.pop()
+    if (this.top.kind === 'home' && this.backend) {
+      void this.loadHomeCounts()
+    }
+    this.change()
   }
 
   /** SCROLL_BOTTOM_EVENT: swipe down past the last item — no-op in v1. */
@@ -302,6 +387,83 @@ export class Nav {
       this.setError(err)
     }
   }
+
+  // ── voice quick-add ────────────────────────────────────────────────────
+
+  private async startListening(): Promise<void> {
+    if (!this.isVoiceAvailable() || !this.bridge) return
+    const provider = this.settings.stt.provider
+    if (provider === 'off') return
+    this.clearToast()
+    const frame: ListeningFrame = {
+      kind: 'listening',
+      body: '',
+      projectId: this.settings.defaultProjectId,
+    }
+    this.stack.push(frame)
+    this.change()
+
+    this.sttSession = new STTSession(
+      {
+        bridge: this.bridge,
+        provider,
+        apiKey: this.settings.stt.apiKey,
+        language: this.settings.stt.language,
+      },
+      {
+        onTranscript: (text) => {
+          if (this.top !== frame) return
+          frame.body = text
+          this.change()
+        },
+        onError: (message) => {
+          this.cancelSttSession()
+          if (this.top === frame) this.stack.pop()
+          this.setError(new Error(message))
+        },
+      },
+    )
+
+    try {
+      await this.sttSession.start((finalText) => {
+        void this.commitSpokenTask(finalText, frame)
+      })
+    } catch (err) {
+      this.cancelSttSession()
+      if (this.top === frame) this.stack.pop()
+      this.setError(err)
+    }
+  }
+
+  private async commitSpokenTask(
+    text: string,
+    frame: ListeningFrame,
+  ): Promise<void> {
+    this.sttSession = null
+    if (this.top === frame) this.stack.pop()
+    this.change()
+    if (!this.backend || !text) return
+    try {
+      await this.backend.createTask({
+        title: text,
+        projectId: frame.projectId,
+      })
+      this.showToast(`added: ${text}`)
+      // Refresh home counts so the new task is reflected.
+      void this.loadHomeCounts()
+    } catch (err) {
+      this.setError(err)
+    }
+  }
+
+  private cancelSttSession(): void {
+    try {
+      this.sttSession?.cancel()
+    } catch { /* ignore */ }
+    this.sttSession = null
+  }
+
+  // ── list tap flow ──────────────────────────────────────────────────────
 
   private async tapListTask(task: TodoTask, fromFrame: ListFrame): Promise<void> {
     const backend = this.backend

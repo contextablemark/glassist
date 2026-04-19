@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskPage, TaskView, TodoBackend } from '../../backends'
-import type { TodoTask } from '../../types'
+import type { GlassistSettings, TodoTask } from '../../types'
+import { DEFAULT_SETTINGS } from '../../types'
 import { Nav, type Scene } from '../nav'
+
+const BASE_SETTINGS: GlassistSettings = DEFAULT_SETTINGS
 
 function task(id: string, title: string, overrides: Partial<TodoTask> = {}): TodoTask {
   return {
@@ -62,25 +65,26 @@ describe('Nav', () => {
   })
 
   it('emits a no-token status scene when backend is null', () => {
-    const nav = new Nav({ backend: null })
+    const nav = new Nav({ backend: null, settings: BASE_SETTINGS })
     const scene = expectStatus(nav.render())
     expect(scene.text).toMatch(/Open Glassist on your phone/)
   })
 
   it('emits a home list scene with "Glassist" header and (…) placeholders while counts load', async () => {
-    let resolveToday: (p: TaskPage) => void = () => {}
+    let resolveInbox: (p: TaskPage) => void = () => {}
     backend.getTasks.mockImplementation((view: TaskView) => {
-      if (view === 'today') return new Promise<TaskPage>((r) => (resolveToday = r))
+      if (view === 'inbox') return new Promise<TaskPage>((r) => (resolveInbox = r))
       return Promise.resolve(page([]))
     })
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     const initial = expectList(nav.render())
     expect(initial.header).toMatch(/Glassist/)
-    expect(initial.items[0]).toMatch(/Today.*\(…\)/)
+    // Inbox is the first row in the menu.
+    expect(initial.items[0]).toMatch(/Inbox.*\(…\)/)
     await flush()
-    resolveToday(page([task('t1', 'x')]))
+    resolveInbox(page([task('t1', 'x')]))
     await flush()
-    expect(expectList(nav.render()).items[0]).toMatch(/Today.*\(1\)/)
+    expect(expectList(nav.render()).items[0]).toMatch(/Inbox.*\(1\)/)
   })
 
   it('appends "+" to a home count when hasMore is true', async () => {
@@ -88,7 +92,7 @@ describe('Nav', () => {
       if (view === 'all') return page([task('a', 'x')], true)
       return page([])
     })
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     const scene = expectList(nav.render())
     expect(scene.items[3]).toMatch(/All tasks.*\(1\+\)/)
@@ -96,11 +100,11 @@ describe('Nav', () => {
 
   it('tap on a home menu item pushes the corresponding list', async () => {
     backend.getTasks.mockResolvedValue(page([]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
-    nav.onTap(0) // Today
+    nav.onTap(0) // Inbox (first menu row)
     const loading = expectStatus(nav.render())
-    expect(loading.text).toMatch(/Today/)
+    expect(loading.text).toMatch(/Inbox/)
     expect(loading.text).toMatch(/Loading…/)
     await flush()
     // Empty list renders as a list scene with just the Back item + placeholder.
@@ -111,7 +115,7 @@ describe('Nav', () => {
 
   it('list scenes prepend a "▲ Back" item at index 0', async () => {
     backend.getTasks.mockResolvedValue(page([task('a', 'Call dentist')]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Today
     await flush()
@@ -122,7 +126,7 @@ describe('Nav', () => {
 
   it('tap on index 0 (Back) pops the level', async () => {
     backend.getTasks.mockResolvedValue(page([task('a', 'x')]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Today
     await flush()
@@ -134,7 +138,7 @@ describe('Nav', () => {
   it('tap on a leaf task completes it and surfaces a "done:" toast in the header', async () => {
     backend.getTasks.mockResolvedValue(page([task('a', 'Call dentist')]))
     backend.getSubtasks.mockResolvedValue([])
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Today
     await flush()
@@ -157,7 +161,7 @@ describe('Nav', () => {
       if (id === 'p') return [subtask]
       return []
     })
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Today
     await flush()
@@ -177,7 +181,7 @@ describe('Nav', () => {
   it('tap on a parent task pushes a subtasks frame', async () => {
     backend.getTasks.mockResolvedValue(page([task('p', 'Plan trip')]))
     backend.getSubtasks.mockResolvedValue([task('c1', 'Book flight')])
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0) // Today
     await flush()
@@ -193,7 +197,7 @@ describe('Nav', () => {
 
   it('scroll up (top boundary) pops back to Home', async () => {
     backend.getTasks.mockResolvedValue(page([task('a', 'x')]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0)
     await flush()
@@ -204,7 +208,7 @@ describe('Nav', () => {
 
   it('shows an error screen when loading fails, and retries on tap', async () => {
     backend.getTasks.mockRejectedValue(new Error('Token invalid (401)'))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     const errScene = expectStatus(nav.render())
     expect(errScene.text).toMatch(/ERROR/)
@@ -220,7 +224,7 @@ describe('Nav', () => {
     const parent = task('p', 'Planter for porch')
     const child = task('c', 'Assemble it', { parentId: 'p' })
     backend.getTasks.mockResolvedValue(page([parent, child]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0)
     await flush()
@@ -242,7 +246,7 @@ describe('Nav', () => {
       }
       return page([])
     })
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     const scene = expectList(nav.render())
     expect(scene.items[3]).toMatch(/All tasks.*\(1\)/)
@@ -256,9 +260,10 @@ describe('Nav', () => {
       if (view === 'today') return page([parent])
       return page([])
     })
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
-    nav.onTap(0)
+    // Today is the second menu row now (Inbox is first).
+    nav.onTap(1)
     await flush()
     const scene = expectList(nav.render())
     const planterLine = scene.items.find((l) => l.includes('Plan trip')) ?? ''
@@ -269,7 +274,7 @@ describe('Nav', () => {
   it('lists with >20 tasks are truncated to the SDK cap (incl. Back item)', async () => {
     const many = Array.from({ length: 30 }, (_, i) => task(`t${i}`, `Task ${i}`))
     backend.getTasks.mockResolvedValue(page(many))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.onTap(0)
     await flush()
@@ -279,9 +284,71 @@ describe('Nav', () => {
     expect(scene.items[0]).toMatch(/Back/)
   })
 
+  it('home hides "+ Speak a task" when STT is off', async () => {
+    backend.getTasks.mockResolvedValue(page([]))
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
+    await flush()
+    const scene = expectList(nav.render())
+    expect(scene.items.some((i) => i.includes('Speak a task'))).toBe(false)
+  })
+
+  it('home shows "+ Speak a task" as the first item when STT is configured', async () => {
+    backend.getTasks.mockResolvedValue(page([]))
+    const voiceSettings: GlassistSettings = {
+      ...BASE_SETTINGS,
+      stt: { provider: 'soniox', apiKey: 'sk_test', language: 'en' },
+    }
+    const nav = new Nav({
+      backend,
+      settings: voiceSettings,
+      bridge: {} as never,
+      onChange,
+    })
+    await flush()
+    const scene = expectList(nav.render())
+    expect(scene.items[0]).toMatch(/Speak a task/)
+    // The four view rows shift down by one when Speak is present;
+    // Inbox is first in the view list.
+    expect(scene.items[1]).toMatch(/Inbox/)
+  })
+
+  it('setSettings updates the home menu in place without resetting position', async () => {
+    backend.getTasks.mockResolvedValue(page([]))
+    const nav = new Nav({
+      backend,
+      settings: BASE_SETTINGS,
+      bridge: {} as never,
+      onChange,
+    })
+    await flush()
+    expect(expectList(nav.render()).items.some((i) => i.includes('Speak'))).toBe(false)
+    nav.setSettings({
+      ...BASE_SETTINGS,
+      stt: { provider: 'soniox', apiKey: 'sk', language: 'en' },
+    })
+    expect(expectList(nav.render()).items.some((i) => i.includes('Speak'))).toBe(true)
+  })
+
+  it('refreshes home counts when popping back to Home', async () => {
+    backend.getTasks.mockResolvedValue(page([task('a', 'x')]))
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
+    await flush()
+    const initialHomeCalls = backend.getTasks.mock.calls.length
+    // Navigate into Today then pop back. Back should trigger another
+    // round of getTasks('today' | 'upcoming' | 'inbox' | 'all').
+    nav.onTap(0) // Today
+    await flush()
+    const afterPushCalls = backend.getTasks.mock.calls.length
+    expect(afterPushCalls).toBeGreaterThan(initialHomeCalls) // push fired loadList
+    nav.onTap(0) // Back → pop to Home
+    await flush()
+    const afterPopCalls = backend.getTasks.mock.calls.length
+    expect(afterPopCalls).toBeGreaterThan(afterPushCalls)
+  })
+
   it('setBackend(null) switches to the no-token status scene', async () => {
     backend.getTasks.mockResolvedValue(page([]))
-    const nav = new Nav({ backend, onChange })
+    const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })
     await flush()
     nav.setBackend(null)
     const scene = expectStatus(nav.render())

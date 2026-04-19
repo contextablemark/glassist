@@ -28,6 +28,26 @@ Open `http://localhost:5175` in a browser for the phone settings UI. Sideload to
 npm run qr        # shows QR; scan with the Even App
 ```
 
+## Vikunja CORS in development
+
+Vikunja Cloud only allowlists `localhost` / `127.0.0.1`-origin requests. If
+you sideload Glassist to a phone over LAN, the WebView origin becomes
+`http://<host-lan-ip>:5173` and the request is blocked before it reaches
+Vikunja.
+
+The dev server runs a proxy middleware at `/vikunja-proxy` that forwards
+to Vikunja server-side (no CORS), so dev builds use that transparently.
+For a self-hosted Vikunja, point the proxy at your instance by setting an
+env var before starting the dev server:
+
+```bash
+VIKUNJA_PROXY_TARGET=https://vikunja.my-domain.com npm run dev
+```
+
+This proxy is dev-only. Production `.ehpk` builds need either a permissive
+self-hosted Vikunja (`cors.origins`) or a separate CORS-relay (e.g. a
+Cloudflare Worker).
+
 ## Getting your API token
 
 **Todoist** — Settings → Integrations → Developer → Copy API token

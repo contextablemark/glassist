@@ -7,57 +7,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
-- Glasses now read real data from the configured backend (fake-data module removed). Home shows Today / Upcoming / Inbox / All counts; tapping drills into the live list; tapping a task completes it via the backend.
-- Synthetic `▲ Back` row on every pushed list/subtasks frame — the only reliable way to pop a level on a `ListContainer` since the firmware emits no event when the user swipes past a boundary that has no scroll range.
-- Header-only toast feedback for completions: tapping a task shows `done: <title>` (or `undo: <title>` on re-tap) in the header for ~2.5 seconds, then reverts. The list container is left untouched so the firmware's selection does not reset.
-- `▶` indicator restored for tasks known to have subtasks. Parent IDs are derived from the `all` fetch we already do for Home counts, so no extra network calls.
-- Home counts show `(N+)` when the backend reports more pages than we fetched (cap at 200 per request via the Todoist SDK's `limit` arg).
-- Phone↔glasses sync: `saveSettings` dispatches a `glassist:settings-changed` CustomEvent and the glasses `Nav` rebuilds its backend when fired.
-- `TodoBackend.getSubtasks(parentId)` on the interface, implemented for Todoist via `api.getTasks({ parentId })`.
-- Empty lists render as a `▲ Back` + `(no tasks)` list instead of a dead-end status screen, so the user can always navigate back.
+
+- **`VikunjaBackend`** — hand-rolled REST client against the `/api/v1/*` surface that Vikunja v2.x still exposes. Same `TodoBackend` interface as `TodoistBackend`: projects, views (inbox / today / upcoming / all / project), complete / uncomplete / create / delete, and subtasks. Priority scale (Vikunja 0–5) maps directly onto our normalized 1–5 + undefined. Zero-date sentinels (`0001-01-01T00:00:00Z`) are filtered out of the due-date field. Base URL is normalised (appends `/api/v1` if absent). Handles both v1's array-shaped `related_tasks` and v2's object-map shape with inlined child tasks (skipping N+1 fetches when possible).
+- **Vite dev-mode CORS proxy for Vikunja** (`/vikunja-proxy`). Vikunja Cloud's CORS allowlist includes `localhost` / `127.0.0.1` but blocks LAN IPs used for phone-sideload testing. The proxy middleware forwards requests server-side so the WebView sees same-origin calls. Configurable via `VIKUNJA_PROXY_TARGET` for self-hosted instances. Documented in the README.
+- **Voice quick-add** on glasses: `+ Speak a task` row at the top of Home when an STT API key is configured. Tapping pushes a Listening scene (title + body TextContainers). Soniox (default) or Deepgram via `even-toolkit/stt`. Transcript updates in the body via `textContainerUpgrade` on every interim token. Tap submits; swipe-up cancels; **2 s of silence auto-submits** (client-side timer, since `even-toolkit` filters out Soniox's `<end>` VAD token). On submit: `backend.createTask` → return Home with `added: <title>` toast.
+- **Phone Voice tab** — real form: provider picker (Off / Soniox / Deepgram), API key input, language selector. Settings persist through the existing storage wrapper and fire `glassist:settings-changed` so the glasses Nav picks up changes without a reload.
+- **Glasses nav now reads real backend data** (fake-data module removed). Home shows Inbox / Today / Upcoming / All counts; each tap drills into the live list. `(N+)` suffix when the backend has more pages than we fetched.
+- **`▲ Back` synthetic row** on every pushed list / subtasks frame. The `ListContainer` primitive only emits `SCROLL_TOP_EVENT` at real scroll boundaries — lists that fit the container never fire one, so an explicit tap target is the only reliable way back.
+- **Header-only toast feedback** on completion: tapping a task shows `done: <title>` (or `undo: <title>` on re-tap) in the header for ~2.5 seconds. The list container is not rebuilt, so the firmware's selection cursor stays put through bursts of completions.
+- **`▶` indicator** for tasks known to be parents. Parent IDs are derived from the `all` fetch we already run for Home counts — no extra network calls.
+- **Phone↔glasses sync** via `glassist:settings-changed` CustomEvent. Token, backend choice, STT keys all reflect on-glass without a restart.
+- **`TodoBackend.getSubtasks(parentId)`** on the interface.
+- **Empty lists** render with a `▲ Back` row + `(no tasks)` instead of a dead-end status screen.
+- **Home header** shows `Glassist`.
 
 ### Changed
-- Glasses rendering switched from a single `TextContainer` that we updated on every gesture to a `ListContainer` + optional header `TextContainer`. Firmware paints the native selection border and handles internal scrolling — no more scroll-jump flash on every swipe.
-- Completion UX is now deferred: tapping a task calls the backend API in the background but does not rebuild the list. The `×` inline glyph is gone; feedback lives in the header toast. Rebuilds happen only on navigation, errors, and settings changes, preserving firmware selection through completion bursts.
-- `TodoBackend.getTasks` now returns `{ tasks, hasMore }`; Todoist requests `limit: 200` per page so counts are accurate up to the SDK cap.
-- Priority type widened from `1 | 2 | 3 | 4` to `1 | 2 | 3 | 4 | 5 | undefined`, matching Vikunja's scale; Todoist's range fits at 1–4.
-- Priority glyphs tuned for the firmware font: `★ ● ◆ ◇ ○` across 5 levels, with blank slots for no-priority. Slot widths chosen on-glass so titles line up reasonably on the non-monospaced font.
-- `▸` (U+25B8) replaced with `▶` (U+25B6) — the firmware font's glyph set lacks U+25B8 and was silently dropping it.
-- Home now has a persistent `Glassist` header above the menu.
-- List/subtasks headers no longer display the `▲` trailing; the synthetic `▲ Back` row makes it redundant and the header can't capture events anyway (only one event-capturing container per page).
-- `TodoistBackend` now uses the official `@doist/todoist-sdk` (v9.3.0) instead of hand-rolled REST: the SDK owns pagination, headers, and error shapes, and we stop maintaining them.
-- `makeBackend` is now async — backend adapter modules are loaded via dynamic `import()` so the ~210 KB gz of SDK + zod lands in on-demand chunks instead of the initial bundle. First-load size stays at ~92 KB gz.
-- A `browserFetch` adapter wraps `window.fetch` to satisfy the SDK's `CustomFetchResponse` contract (headers normalized from `Headers` → `Record<string,string>`).
-- `@evenrealities/even_hub_sdk` bumped from 0.0.9 → 0.0.10. No API surface changes; the `readNumber` 0-is-missing quirk is still present in 0.0.10 so our explicit `undefined → 0` fallback stays in `input.ts`.
+
+- **Home menu order**: Inbox → Today → Upcoming → All tasks (was Today-first). When voice is enabled, `+ Speak a task` sits above Inbox. Counts refresh whenever we pop back to Home.
+- **Glasses rendering**: single `TextContainer` + per-gesture upgrades → `ListContainer` + optional `TextContainer` header. Firmware owns the selection border and internal scroll — no more paint flash on every swipe.
+- **Deferred completion UX**: tap calls the backend but does not rebuild the list. Inline `×` glyph removed; feedback lives in the header toast. Rebuilds happen only on navigation, errors, and settings changes.
+- **Vikunja project / inbox queries** now include `filter=done = false` so completed tasks drop out on the next re-entry (Vikunja's default is to return all tasks regardless of completion).
+- **`TodoBackend.getTasks`** returns `{ tasks, hasMore }`. Todoist requests `limit: 200`; Vikunja requests `per_page: 50` (v2.x `max_items_per_page`).
+- **Priority** widened to 1–5 + undefined, matching Vikunja's scale; Todoist occupies 1–4.
+- **Priority glyphs** tuned on-glass: `★ ● ◆ ◇ ○` for 5 levels, blank slot for no-priority.
+- **`▸` → `▶`** (U+25B8 is absent from the firmware LVGL font; U+25B6 is present).
+- **`TodoistBackend`** uses the official `@doist/todoist-sdk` (v9.3.0).
+- **`makeBackend`** is async — adapter modules load via dynamic `import()`. Vikunja and Todoist chunks are on-demand; initial load stays around 96 KB gz.
+- **`@evenrealities/even_hub_sdk`** bumped 0.0.9 → 0.0.10. No API changes; the `readNumber` zero-as-missing quirk is still present (on-hardware probed).
 
 ### Fixed
-- Tapping the first item (index 0) on any `ListContainer` — Home's first menu entry, the `▲ Back` row — previously did nothing. The SDK's `readNumber` helper treats zero as a missing field, so `currentSelectItemIndex=0` arrived as `undefined`. `input.ts` now snaps `undefined`/`null` back to `0`.
-- Subtasks no longer leak into flat list views (Today / Upcoming / Inbox / All). The backend's results are filtered to top-level tasks before both the count and the list render.
+
+- **Tapping the first item** on any `ListContainer` was a no-op. The SDK's `readNumber` treats 0 as a missing field, so `currentSelectItemIndex=0` arrived as `undefined`. `input.ts` now snaps undefined / null back to 0.
+- **Subtasks no longer leak** into flat list views (Today / Upcoming / Inbox / All). Filtered to top-level tasks before both counts and list render.
+- **Header toast truncation**. `renderMenuLine` stops padding headers with trailing spaces (proportional font could push them past container width); the header `TextContainer` is slightly taller (32 → 36 px) so the font doesn't get clipped.
 
 ### Removed
-- In-session `×` marker on completed items (moved to header toast — see above).
-- Manual windowing / `itemsPerPage` plumbing in `Nav`. Firmware handles scrolling inside the `ListContainer` natively.
-- `src/glasses/fake.ts` (no longer used now that the glasses read real data).
 
-### Added
-- Glasses nav state machine with Home → List → Subtasks levels and per-frame cursor
-- Single-container rendering pipeline: `createStartUpPageContainer` once, `textContainerUpgrade` for every subsequent input (flicker-free)
-- Home menu rendering: Today / Upcoming / Inbox / All tasks with task counts
-- Task-line renderer with a 38-char budget: cursor, glyph slot, title, right-aligned due
-- List renderer with tap-header-to-pop and inline subtask drill-down via `▶` trailing
-- In-session completion tracking per list frame (session `×` marker; flush on level exit)
-- Fake task and project dataset to iterate on glasses UX before backends land
-- Due-date formatter: `late` / `today` / `tmrw` / `2d`–`6d` / day-of-week / `M/D`, max 5 chars
-- 21 unit tests across `priority`, `due`, `line`, and `nav`
-
-### Changed
-- Cursor indicator: `> ` → `│ ` (U+2502, thinner pixel footprint on the non-monospaced font)
-- Priority type widened from 1–4 to 1–5 with optional undefined, matching Vikunja's scale; Todoist tasks fit naturally in 1–4
-- Priority glyphs tuned on-hardware: `★` (5) / `●` (4) / `◆` (3) / `◇` (2) / `○` (1) — same-family geometric shapes for consistent scale
-- "Has subtasks" indicator: `▸` → `▶` (firmware font lacks U+25B8)
-- "No priority" slot widened to 5 spaces; "Completed" slot is ` × ` padded — on-glass tuning achieves title alignment across states
-- List headers preserve original case (was all-caps)
-- Dev server port: 5175 → 5173
+- Inline `×` on completed items (feedback moved to the header toast).
+- Manual windowing / `itemsPerPage` plumbing in `Nav` — the `ListContainer` scrolls natively.
+- `node-vikunja` dependency. Briefly used during the Vikunja slice, then dropped: the SDK targets Vikunja v1.x and breaks on v2.x (hits deprecated `/tasks/all`, over-large `per_page`, `+`-encoded filter spaces). Hand-rolled REST is ~240 lines and sidesteps all of these.
+- `src/glasses/fake.ts` (no longer used).
 
 ## [0.1.0] — 2026-04-18
 

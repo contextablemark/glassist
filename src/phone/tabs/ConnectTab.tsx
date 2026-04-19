@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { GlassistSettings, TodoProject, TodoTask } from '../../types'
+import type { GlassistSettings, TodoProject } from '../../types'
 import { DEFAULT_SETTINGS } from '../../types'
 import { getSettings, saveSettings } from '../../lib/storage'
 import { makeBackend } from '../../backends'
-import { priorityGlyph } from '../../lib/priority'
-import { formatDue } from '../../lib/due'
 
 type TestState =
   | { kind: 'idle' }
@@ -17,8 +15,6 @@ export function ConnectTab() {
   const [loaded, setLoaded] = useState(false)
   const [test, setTest] = useState<TestState>({ kind: 'idle' })
   const [projects, setProjects] = useState<TodoProject[]>([])
-  const [tasks, setTasks] = useState<TodoTask[]>([])
-  const [tasksError, setTasksError] = useState<string | null>(null)
 
   useEffect(() => {
     getSettings().then((s) => {
@@ -29,7 +25,7 @@ export function ConnectTab() {
 
   function update<K extends keyof GlassistSettings>(
     key: K,
-    value: GlassistSettings[K]
+    value: GlassistSettings[K],
   ): void {
     setSettings((prev) => {
       const next = { ...prev, [key]: value }
@@ -41,8 +37,6 @@ export function ConnectTab() {
   async function onTest(): Promise<void> {
     setTest({ kind: 'testing' })
     setProjects([])
-    setTasks([])
-    setTasksError(null)
 
     const backend = await makeBackend(settings)
     const result = await backend.testConnection()
@@ -54,19 +48,15 @@ export function ConnectTab() {
     setTest({ kind: 'ok' })
 
     try {
-      const [projectList, todayPage] = await Promise.all([
-        backend.getProjects(),
-        backend.getTasks('today'),
-      ])
+      const projectList = await backend.getProjects()
       setProjects(projectList)
-      setTasks(todayPage.tasks)
-
       if (!settings.defaultProjectId) {
         const inbox = projectList.find((p) => p.name.toLowerCase() === 'inbox')
         if (inbox) update('defaultProjectId', inbox.id)
       }
     } catch (err) {
-      setTasksError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setTest({ kind: 'error', message: `Loaded, but couldn't fetch projects: ${message}` })
     }
   }
 
@@ -141,25 +131,6 @@ export function ConnectTab() {
           </Field>
         )}
       </div>
-
-      {test.kind === 'ok' && (
-        <div className="space-y-3 border-t border-neutral-800 pt-5">
-          <h3 className="text-base font-medium">Today</h3>
-          {tasksError && (
-            <p className="text-sm text-red-400">Couldn't load tasks: {tasksError}</p>
-          )}
-          {!tasksError && tasks.length === 0 && (
-            <p className="text-sm text-neutral-500">Nothing due today.</p>
-          )}
-          {tasks.length > 0 && (
-            <ul className="divide-y divide-neutral-800">
-              {tasks.map((t) => (
-                <TaskRow key={t.id} task={t} />
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </section>
   )
 }
@@ -177,16 +148,4 @@ function TestStatus({ state }: { state: TestState }) {
   if (state.kind === 'ok') return <span className="text-sm text-emerald-400">✓ Connected</span>
   if (state.kind === 'error') return <span className="text-sm text-red-400">✗ {state.message}</span>
   return null
-}
-
-function TaskRow({ task }: { task: TodoTask }) {
-  const due = formatDue(task.dueDate)
-  const glyph = task.priority === undefined ? ' ' : priorityGlyph(task.priority)
-  return (
-    <li className="py-2 flex items-center gap-3 text-sm">
-      <span className="w-5 text-center text-emerald-400">{glyph}</span>
-      <span className="flex-1">{task.title}</span>
-      {due && <span className="text-neutral-500 text-xs">{due}</span>}
-    </li>
-  )
 }

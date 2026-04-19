@@ -30,7 +30,10 @@ const STATUS_ID = 3
 
 const DISPLAY_W = 576
 const DISPLAY_H = 288
-const HEADER_H = 32
+// Header TextContainer height. 32 pixels was just enough for the firmware
+// font vertically, which left toasts looking clipped; 36 gives ~4 px of
+// breathing room top+bottom without eating into the list area noticeably.
+const HEADER_H = 36
 // Approximate firmware row height for list items. Empirically tuned so
 // short lists don't look stretched (firmware stretches items to fill the
 // container if we make it bigger than needed).
@@ -39,6 +42,10 @@ const ITEM_H = 40
 type Layout =
   | { kind: 'status' }
   | { kind: 'list'; withHeader: boolean }
+  | { kind: 'listening' }
+
+const LISTENING_TITLE_ID = 4
+const LISTENING_BODY_ID = 5
 
 function sameItems(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false
@@ -81,6 +88,44 @@ function containersForScene(scene: Scene): {
           containerID: STATUS_ID,
           containerName: 'status',
           content: scene.text,
+          isEventCapture: 1,
+        }),
+      ],
+      listObject: [],
+    }
+  }
+
+  if (scene.kind === 'listening') {
+    return {
+      containerTotalNum: 2,
+      layout: { kind: 'listening' },
+      textObject: [
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: 0,
+          width: DISPLAY_W,
+          height: HEADER_H,
+          borderWidth: 0,
+          borderColor: 0,
+          borderRadius: 0,
+          paddingLength: 4,
+          containerID: LISTENING_TITLE_ID,
+          containerName: 'lstTitle',
+          content: scene.title,
+          isEventCapture: 0,
+        }),
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: HEADER_H,
+          width: DISPLAY_W,
+          height: DISPLAY_H - HEADER_H,
+          borderWidth: 0,
+          borderColor: 0,
+          borderRadius: 0,
+          paddingLength: 6,
+          containerID: LISTENING_BODY_ID,
+          containerName: 'lstBody',
+          content: scene.body,
           isEventCapture: 1,
         }),
       ],
@@ -179,6 +224,44 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
       return
     }
 
+    // Fast path 2a: listening → listening. Transcript body changes on every
+    // interim token; title only changes when a toast fires. Both updates
+    // are cheap textContainerUpgrade calls.
+    if (
+      lastScene?.kind === 'listening' &&
+      scene.kind === 'listening' &&
+      lastLayout?.kind === 'listening'
+    ) {
+      try {
+        if (scene.body !== lastScene.body) {
+          await bridge.textContainerUpgrade(
+            new TextContainerUpgrade({
+              containerID: LISTENING_BODY_ID,
+              containerName: 'lstBody',
+              contentOffset: 0,
+              contentLength: 2000,
+              content: scene.body,
+            }),
+          )
+        }
+        if (scene.title !== lastScene.title) {
+          await bridge.textContainerUpgrade(
+            new TextContainerUpgrade({
+              containerID: LISTENING_TITLE_ID,
+              containerName: 'lstTitle',
+              contentOffset: 0,
+              contentLength: 2000,
+              content: scene.title,
+            }),
+          )
+        }
+      } catch (err) {
+        devLog(`textContainerUpgrade(listening) ERROR: ${err}`)
+      }
+      lastScene = scene
+      return
+    }
+
     // Fast path 2: list → list with identical items. Only the header can
     // have changed (toast in/out, title swap) — textContainerUpgrade the
     // header so the firmware's list selection doesn't reset.
@@ -242,6 +325,8 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
 
   const nav = new Nav({
     backend,
+    settings,
+    bridge,
     onChange: () => {
       void paint(nav.render())
     },
@@ -270,10 +355,19 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
     onForegroundExit: () => devLog('foreground exit'),
   })
 
+  let lastAppliedSettings = settings
   window.addEventListener(SETTINGS_CHANGED_EVENT, async () => {
-    devLog('settings changed — rebuilding backend')
+    devLog('settings changed — re-reading')
     const updated = await getSettings()
-    const nextBackend = await buildBackend(updated)
-    nav.setBackend(nextBackend)
+    const backendChanged =
+      updated.backend !== lastAppliedSettings.backend ||
+      updated.token !== lastAppliedSettings.token ||
+      updated.vikunjaBaseUrl !== lastAppliedSettings.vikunjaBaseUrl
+    nav.setSettings(updated)
+    if (backendChanged) {
+      const nextBackend = await buildBackend(updated)
+      nav.setBackend(nextBackend)
+    }
+    lastAppliedSettings = updated
   })
 }
