@@ -133,10 +133,13 @@ function isTopLevel(t: TodoTask): boolean {
 
 function matchesView(t: TodoTask, view: TaskView, projectId?: string): boolean {
   if (t.isCompleted) return false
+  // `all` returns subtasks too, matching Todoist/Vikunja shape — Nav
+  // filters to top-level for the count and harvests parent IDs from the
+  // subtasks that remain (this is how the ▶ chevron indicator lights up).
+  if (view === 'all') return true
   if (!isTopLevel(t)) return false
   if (view === 'project') return t.projectId === projectId
   if (view === 'inbox') return t.projectId === INBOX_ID
-  if (view === 'all') return true
   if (!t.dueDate) return false
   const due = new Date(t.dueDate).getTime()
   if (Number.isNaN(due)) return false

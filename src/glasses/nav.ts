@@ -83,6 +83,8 @@ export interface NavOptions {
   /** Required for voice quick-add; `null` in phone-only mode. */
   bridge?: EvenAppBridge | null
   onChange?: () => void
+  /** Optional tracer; boot.ts wires this to the dev-server `/dev-log` POST. */
+  log?: (msg: string) => void
 }
 
 export class Nav {
@@ -90,6 +92,7 @@ export class Nav {
   private settings: GlassistSettings
   private bridge: EvenAppBridge | null
   private onChange?: () => void
+  private log: (msg: string) => void
   private stack: Frame[]
   private error: { message: string } | null = null
   private knownParentIds: Set<string> = new Set()
@@ -106,6 +109,7 @@ export class Nav {
     this.settings = options.settings
     this.bridge = options.bridge ?? null
     this.onChange = options.onChange
+    this.log = options.log ?? (() => {})
     this.stack = [blankHome()]
     if (this.backend) void this.loadHomeCounts()
   }
@@ -334,6 +338,7 @@ export class Nav {
     if (!backend) return
     const home = this.stack[0]
     if (home.kind !== 'home') return
+    this.log(`loadHomeCounts start (backend=${backend.name})`)
     const views: HomeId[] = ['today', 'upcoming', 'inbox', 'all']
     await Promise.all(
       views.map(async (view) => {
@@ -350,8 +355,10 @@ export class Nav {
           const topLevel = page.tasks.filter((t) => !t.parentId)
           home.counts = { ...home.counts, [view]: topLevel.length }
           home.hasMore = { ...home.hasMore, [view]: page.hasMore }
+          this.log(`loadHomeCounts ${view}=${topLevel.length}${page.hasMore ? '+' : ''}`)
           this.change()
         } catch (err) {
+          this.log(`loadHomeCounts ${view} ERROR: ${describeError(err)}`)
           this.setError(err)
         }
       }),
@@ -495,9 +502,18 @@ export class Nav {
 
   // ── helpers ────────────────────────────────────────────────────────────
 
+  /**
+   * First-error-wins: when four parallel loadHomeCounts fetches fail
+   * simultaneously, we want the earliest root cause preserved for the
+   * ERROR scene, not whichever finished last. The error clears when the
+   * user taps to retry.
+   *
+   * The message is flattened (newlines collapsed) and bounded so a long
+   * stack trace doesn't scroll the status container off-screen.
+   */
   private setError(err: unknown): void {
-    const message = err instanceof Error ? err.message : String(err)
-    this.error = { message }
+    if (this.error) return
+    this.error = { message: describeError(err) }
     this.change()
   }
 
@@ -539,4 +555,13 @@ export class Nav {
 
 function blankHome(): HomeFrame {
   return { kind: 'home', counts: {}, hasMore: {} }
+}
+
+function describeError(err: unknown): string {
+  const MAX = 200
+  const raw = err instanceof Error
+    ? `${err.name && err.name !== 'Error' ? err.name + ': ' : ''}${err.message || String(err)}`
+    : String(err)
+  const flat = raw.replace(/\s+/g, ' ').trim()
+  return flat.length > MAX ? flat.slice(0, MAX) + '…' : flat
 }

@@ -329,6 +329,7 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
     onChange: () => {
       void paint(nav.render())
     },
+    log: (msg) => devLog(`[nav] ${msg}`),
   })
 
   await paint(nav.render())
