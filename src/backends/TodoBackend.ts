@@ -14,7 +14,7 @@ export interface TaskPage {
 }
 
 export interface TodoBackend {
-  readonly name: 'Todoist' | 'Vikunja'
+  readonly name: 'Todoist' | 'Vikunja' | 'Demo'
 
   getTasks(view: TaskView, projectId?: string): Promise<TaskPage>
   getSubtasks(parentId: string): Promise<TodoTask[]>

@@ -56,7 +56,6 @@ function sameItems(a: readonly string[], b: readonly string[]): boolean {
 }
 
 async function buildBackend(settings: GlassistSettings): Promise<TodoBackend | null> {
-  if (!settings.token) return null
   try {
     return await makeBackend(settings)
   } catch (err) {

@@ -4,7 +4,7 @@ Todoist and Vikunja tasks on Even Realities G2 smart glasses. Bring your own API
 
 ## Status
 
-Active development. Read, complete, create-by-voice, and phone-side settings all work end-to-end against both backends.
+0.2.0 — read, complete, create-by-voice, and phone-side settings all work end-to-end against both Todoist and Vikunja. With no token configured, Glassist runs in demo mode against an in-memory sample dataset, so the first-run and Vercel-preview experiences are immediately exercisable.
 
 ## Stack
 
@@ -33,6 +33,8 @@ npm run qr           # shows QR; scan with the Even App
 ## Vercel deployment
 
 A static web build deploys to Vercel as-is. Push to GitHub, import the repo at vercel.com, and it'll pick up `vercel.json` (`buildCommand: npm run build`, `outputDirectory: dist`). The deployed site runs the phone UI; it'll only drive the glasses via the SDK bridge when opened from inside the Even Hub WebView.
+
+First-time visitors (no token configured) land in **demo mode**: the Connect tab flags it explicitly, and the app is pre-populated with non-persistent sample tasks so the nav, completions, and voice flow are all exercisable without signing in. Pasting a real Todoist or Vikunja token swaps the demo data for live data on the next settings-changed event.
 
 ## Getting your API token
 

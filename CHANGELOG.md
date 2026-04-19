@@ -6,8 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-19
+
 ### Added
 
+- **Demo mode.** When no API token is configured, `makeBackend` returns an in-memory `DemoBackend` seeded with sample tasks spread across Today / Upcoming / Inbox (including a parent task with two subtasks). Completions, uncompletions, creates, and deletes all flip state on a module-scoped store so the glasses and phone tabs stay in sync within a session. Nothing persists across reloads. The Connect tab shows an explicit "Demo mode" banner; pasting a real token swaps the instance on the next settings-changed event. Makes the Vercel deploy and first-run `.ehpk` immediately exercisable without an account.
 - **Cloudflare Worker CORS relay** in [`proxy/`](./proxy/README.md). Forwards any path to a configured `UPSTREAM` (defaults to `https://app.vikunja.cloud`) with permissive CORS headers, preserving the caller's `Authorization` header. Required for packaged builds and Vercel deploys since Vikunja Cloud's CORS allowlist blocks non-`localhost` origins. Deploys in one `npm run deploy`.
 - **`vikunjaProxyUrl`** field on the Connect tab. When set, `VikunjaBackend` routes all requests through the proxy instead of hitting Vikunja directly. Takes precedence over the dev-mode Vite middleware too, so you can test your Worker end-to-end before shipping.
 - **`vercel.json`** static-site config. `npm run build` → `dist/` ships as a Vercel web deployment for browser-based testing without packaging to `.ehpk`.

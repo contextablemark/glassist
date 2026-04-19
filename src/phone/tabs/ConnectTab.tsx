@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GlassistSettings, TodoProject } from '../../types'
 import { DEFAULT_SETTINGS } from '../../types'
 import { getSettings, saveSettings } from '../../lib/storage'
-import { makeBackend } from '../../backends'
+import { isDemoMode, makeBackend } from '../../backends'
 
 type TestState =
   | { kind: 'idle' }
@@ -63,15 +63,28 @@ export function ConnectTab() {
   if (!loaded) return <p className="text-sm text-neutral-500">Loading…</p>
 
   const isVikunja = settings.backend === 'vikunja'
+  const demoMode = isDemoMode(settings)
 
   return (
     <section className="space-y-6">
       <div className="space-y-4">
         <h2 className="text-lg font-medium">Connect a backend</h2>
-        <p className="text-sm text-neutral-400">
-          Glassist stores your token only on this device and sends it directly
-          to your provider — never to a Glassist-operated server.
-        </p>
+        {demoMode ? (
+          <div className="rounded border border-amber-700/60 bg-amber-950/40 p-3 text-sm text-amber-200 space-y-1">
+            <p className="font-medium">Demo mode</p>
+            <p className="text-amber-300/80">
+              Glassist is showing sample tasks so you can try the navigation,
+              completions, and voice flow without signing in. Paste a Todoist
+              or Vikunja API token below to connect your own data — the demo
+              tasks disappear and nothing persists.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-400">
+            Glassist stores your token only on this device and sends it directly
+            to your provider — never to a Glassist-operated server.
+          </p>
+        )}
 
         <Field label="Backend">
           <select
