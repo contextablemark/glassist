@@ -11,7 +11,7 @@ import type { EvenAppBridge } from '@evenrealities/even_hub_sdk'
 import { makeBackend, type TodoBackend } from '../backends'
 import { getSettings, SETTINGS_CHANGED_EVENT } from '../lib/storage'
 import type { GlassistSettings } from '../types'
-import { Nav, type Scene } from './nav'
+import { isBridgeSuccess, Nav, type Scene } from './nav'
 import { setupInput } from './input'
 
 function devLog(msg: string): void {
@@ -327,20 +327,38 @@ export async function startGlassesMode(bridge: EvenAppBridge): Promise<void> {
           }),
         )
         devLog(`createStartUpPageContainer result: ${result}`)
+        if (!isBridgeSuccess(result)) {
+          nav.reportBridgeError(`createStartUpPageContainer returned ${result}`)
+        }
       } catch (err) {
         devLog(`createStartUpPageContainer ERROR: ${err}`)
+        nav.reportBridgeError(
+          err instanceof Error ? err.message : String(err),
+        )
       }
     } else {
       try {
-        await bridge.rebuildPageContainer(
+        const result = await bridge.rebuildPageContainer(
           new RebuildPageContainer({
             containerTotalNum,
             textObject,
             listObject,
           }),
         )
+        // The bridge returns `true` on success for rebuildPageContainer
+        // (unlike createStartUpPageContainer which returns 1). Anything
+        // else is a silent failure that would otherwise leave the
+        // on-glass display stuck on the prior scene — surface it through
+        // Nav so the user sees a tap-to-retry ERROR screen.
+        if (!isBridgeSuccess(result)) {
+          devLog(`rebuildPageContainer result: ${result}`)
+          nav.reportBridgeError(`rebuildPageContainer returned ${result}`)
+        }
       } catch (err) {
         devLog(`rebuildPageContainer ERROR: ${err}`)
+        nav.reportBridgeError(
+          err instanceof Error ? err.message : String(err),
+        )
       }
     }
     lastScene = scene

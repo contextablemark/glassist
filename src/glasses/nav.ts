@@ -87,6 +87,10 @@ export interface NavOptions {
   log?: (msg: string) => void
 }
 
+export function isBridgeSuccess(result: unknown): boolean {
+  return result === true || result === 1
+}
+
 export class Nav {
   private backend: TodoBackend | null
   private settings: GlassistSettings
@@ -374,6 +378,7 @@ export class Nav {
       frame.tasks = tasks.filter((t) => !t.parentId)
       this.change()
     } catch (err) {
+      this.log(`loadList ${frame.view} ERROR: ${describeError(err)}`)
       this.setError(err)
     }
   }
@@ -389,6 +394,7 @@ export class Nav {
       frame.tasks = tasks
       this.change()
     } catch (err) {
+      this.log(`loadSubtasks ERROR: ${describeError(err)}`)
       this.setError(err)
     }
   }
@@ -513,6 +519,16 @@ export class Nav {
     if (this.error) return
     this.error = { message: describeError(err) }
     this.change()
+  }
+
+  /**
+   * Surface a bridge-level render failure as a visible ERROR scene. Gives
+   * the glasses user a tap-to-retry state instead of a silently stuck
+   * display when the SDK rejects a container update. Safe to call in the
+   * paint catch block — first-error-wins prevents a retry loop.
+   */
+  reportBridgeError(message: string): void {
+    this.setError(new Error(`Display bridge: ${message}`))
   }
 
   /**

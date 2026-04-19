@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-19
+
+### Changed
+
+- **Bridge failures now surface as a visible ERROR scene on-glass.** `createStartUpPageContainer` and `rebuildPageContainer` both return a status code that was previously swallowed by a devLog-only catch. When the SDK rejects a container update (observed intermittently — `result: 0` on initial paint, and suspected on some drill-down rebuilds), Nav's first-error-wins `setError` now captures it so the user sees a tap-to-retry ERROR frame instead of a silently stuck display. Retries through the usual error-dismiss path re-run the last load. Also handles the fact that `createStartUpPageContainer` returns `1` on success while `rebuildPageContainer` returns `true`.
+
 ## [0.2.1] — 2026-04-19
 
 ### Fixed
