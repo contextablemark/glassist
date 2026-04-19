@@ -55,9 +55,10 @@ VIKUNJA_PROXY_TARGET=https://vikunja.my-domain.com npm run dev
 
 **Production** — the Vite middleware doesn't run in packaged builds. Options:
 
-1. **Deploy the Cloudflare Worker** in [`proxy/`](./proxy/README.md). Sub-2-minute setup; paste the resulting URL into the Connect tab's "CORS proxy URL" field. The worker carries no token of its own — your `Authorization` header passes through untouched.
-2. **Self-host Vikunja** with `cors.origins` configured to allow the Even Hub WebView / Vercel origin. Leave the proxy URL blank.
-3. **Use Todoist** — its CORS allows `*`, so no proxy is ever needed.
+1. **Use the community Worker**: paste `https://glassist-vikunja-proxy.mark-83e.workers.dev` into the Connect tab's "CORS proxy URL" field. Pure relay, no server-side token, forwards to Vikunja Cloud.
+2. **Deploy your own Worker** from [`proxy/`](./proxy/README.md) — sub-2-minute setup if you'd rather not trust the community instance, or if you're pointing at self-hosted Vikunja.
+3. **Self-host Vikunja** with `cors.origins` configured to allow the Even Hub WebView / Vercel origin. Leave the proxy URL blank.
+4. **Use Todoist** — its CORS allows `*`, so no proxy is ever needed.
 
 ## Voice quick-add (optional)
 

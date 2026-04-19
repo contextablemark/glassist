@@ -10,16 +10,21 @@ sends, forwarded upstream, never logged.
 
 ## Community deployment
 
-If you trust `contextablemark` not to MITM your Vikunja token, you can
-point Glassist at the community-hosted worker:
+If you trust the repo maintainer not to MITM your Vikunja token, you
+can point Glassist at the community-hosted worker:
 
 ```
-https://glassist-vikunja-proxy.contextablemark.workers.dev
+https://glassist-vikunja-proxy.mark-83e.workers.dev
 ```
 
-Enter that URL in the Connect tab's **Vikunja CORS proxy URL** field.
+Enter that URL in the Connect tab's **CORS proxy URL** field.
 
-If you'd rather not, deploy your own (under 2 minutes):
+That worker forwards to `app.vikunja.cloud` and nowhere else. Your token
+is in the `Authorization` header Cloudflare transits, never logged, and
+touched only for the hop from the worker to Vikunja.
+
+If you'd rather not trust that instance, deploy your own (under 2
+minutes):
 
 ## Deploy your own
 
