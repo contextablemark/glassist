@@ -114,30 +114,33 @@ describe('TodoistBackend', () => {
     expect(inbox?.name).toBe('Inbox')
   })
 
-  it('getTasks("today") hits getTasksByFilter with today | overdue', async () => {
+  it('getTasks("today") hits getTasksByFilter with today | overdue and limit 200', async () => {
     api.getTasksByFilter.mockResolvedValueOnce({
       results: TASKS_FIXTURE,
       nextCursor: null,
     })
     await backendWith(api).getTasks('today')
-    expect(api.getTasksByFilter).toHaveBeenCalledWith({ query: 'today | overdue' })
+    expect(api.getTasksByFilter).toHaveBeenCalledWith({
+      query: 'today | overdue',
+      limit: 200,
+    })
     expect(api.getTasks).not.toHaveBeenCalled()
   })
 
-  it('getTasks("all") hits getTasks with no filter', async () => {
+  it('getTasks("all") hits getTasks with limit 200', async () => {
     api.getTasks.mockResolvedValueOnce({
       results: TASKS_FIXTURE,
       nextCursor: null,
     })
     await backendWith(api).getTasks('all')
-    expect(api.getTasks).toHaveBeenCalledWith({})
+    expect(api.getTasks).toHaveBeenCalledWith({ limit: 200 })
     expect(api.getTasksByFilter).not.toHaveBeenCalled()
   })
 
   it('getTasks("project", id) hits getTasks with projectId', async () => {
     api.getTasks.mockResolvedValueOnce({ results: [], nextCursor: null })
     await backendWith(api).getTasks('project', '101')
-    expect(api.getTasks).toHaveBeenCalledWith({ projectId: '101' })
+    expect(api.getTasks).toHaveBeenCalledWith({ projectId: '101', limit: 200 })
   })
 
   it('getTasks("project") without projectId throws', async () => {
@@ -146,12 +149,29 @@ describe('TodoistBackend', () => {
     )
   })
 
+  it('getTasks surfaces hasMore when the SDK reports a next cursor', async () => {
+    api.getTasks.mockResolvedValueOnce({
+      results: TASKS_FIXTURE,
+      nextCursor: 'cursor-xyz',
+    })
+    const page = await backendWith(api).getTasks('all')
+    expect(page.hasMore).toBe(true)
+    expect(page.tasks).toHaveLength(TASKS_FIXTURE.length)
+
+    api.getTasks.mockResolvedValueOnce({
+      results: TASKS_FIXTURE,
+      nextCursor: null,
+    })
+    const page2 = await backendWith(api).getTasks('all')
+    expect(page2.hasMore).toBe(false)
+  })
+
   it('getTasks maps priority, due, and project_id correctly', async () => {
     api.getTasksByFilter.mockResolvedValueOnce({
       results: TASKS_FIXTURE,
       nextCursor: null,
     })
-    const tasks = await backendWith(api).getTasks('today')
+    const { tasks } = await backendWith(api).getTasks('today')
     expect(tasks[0]).toMatchObject({
       id: '1',
       title: 'Submit taxes',

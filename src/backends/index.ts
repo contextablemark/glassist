@@ -1,7 +1,7 @@
 import type { GlassistSettings } from '../types'
 import type { TodoBackend } from './TodoBackend'
 
-export type { TodoBackend, TaskView } from './TodoBackend'
+export type { TodoBackend, TaskView, TaskPage } from './TodoBackend'
 
 /**
  * Construct a backend for the current settings. The adapter modules are

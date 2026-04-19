@@ -43,7 +43,7 @@ export const DEFAULT_SETTINGS: GlassistSettings = {
   token: '',
   vikunjaBaseUrl: 'https://app.vikunja.cloud',
   defaultHomeView: 'home',
-  itemsPerPage: 6,
+  itemsPerPage: 9,
   stt: {
     provider: 'off',
     apiKey: '',

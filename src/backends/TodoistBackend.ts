@@ -6,8 +6,12 @@ import {
   type Task,
   type WorkspaceProject,
 } from '@doist/todoist-sdk'
-import type { TaskView, TodoBackend } from './TodoBackend'
+import type { TaskPage, TaskView, TodoBackend } from './TodoBackend'
 import type { Priority, TodoProject, TodoTask } from '../types'
+
+// Todoist's server-side max per page is 200; we request the cap so Home
+// counts are accurate up to 200 and we only need one call per view.
+const PAGE_LIMIT = 200
 
 /**
  * Todoist backend, backed by @doist/todoist-sdk.
@@ -49,19 +53,24 @@ export class TodoistBackend implements TodoBackend {
     return inbox ?? projects[0] ?? null
   }
 
-  async getTasks(view: TaskView, projectId?: string): Promise<TodoTask[]> {
+  async getTasks(view: TaskView, projectId?: string): Promise<TaskPage> {
     if (view === 'project') {
       if (!projectId) throw new Error('projectId required for project view')
-      const { results } = await this.api.getTasks({ projectId })
-      return results.map(mapTask)
+      return toPage(await this.api.getTasks({ projectId, limit: PAGE_LIMIT }))
     }
     if (view === 'all') {
-      const { results } = await this.api.getTasks({})
-      return results.map(mapTask)
+      return toPage(await this.api.getTasks({ limit: PAGE_LIMIT }))
     }
-    const { results } = await this.api.getTasksByFilter({
-      query: viewToFilterQuery(view),
-    })
+    return toPage(
+      await this.api.getTasksByFilter({
+        query: viewToFilterQuery(view),
+        limit: PAGE_LIMIT,
+      }),
+    )
+  }
+
+  async getSubtasks(parentId: string): Promise<TodoTask[]> {
+    const { results } = await this.api.getTasks({ parentId })
     return results.map(mapTask)
   }
 
@@ -121,6 +130,16 @@ function viewToFilterQuery(view: 'today' | 'upcoming' | 'inbox'): string {
       return 'due after: today'
     case 'inbox':
       return '##Inbox'
+  }
+}
+
+function toPage(response: {
+  results: Task[]
+  nextCursor: string | null
+}): TaskPage {
+  return {
+    tasks: response.results.map(mapTask),
+    hasMore: response.nextCursor !== null,
   }
 }
 

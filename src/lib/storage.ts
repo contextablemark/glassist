@@ -47,4 +47,20 @@ export async function getSettings(): Promise<GlassistSettings> {
 
 export async function saveSettings(settings: GlassistSettings): Promise<void> {
   await setItem(SETTINGS_KEY, JSON.stringify(settings))
+  dispatchSettingsChanged()
+}
+
+export const SETTINGS_CHANGED_EVENT = 'glassist:settings-changed'
+
+/**
+ * Fired on every settings save. Phone and glasses modes share the same JS
+ * context inside the Even Hub WebView, so the glasses Nav can listen here to
+ * rebuild its backend when the token or backend choice changes.
+ */
+function dispatchSettingsChanged(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT))
+    }
+  } catch { /* no-op in non-browser contexts */ }
 }

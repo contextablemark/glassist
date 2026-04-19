@@ -1,4 +1,4 @@
-import type { TodoBackend, TaskView } from './TodoBackend'
+import type { TaskPage, TaskView, TodoBackend } from './TodoBackend'
 import type { TodoProject, TodoTask } from '../types'
 
 export class VikunjaBackend implements TodoBackend {
@@ -9,8 +9,11 @@ export class VikunjaBackend implements TodoBackend {
     void this.baseUrl
   }
 
-  async getTasks(_view: TaskView, _projectId?: string): Promise<TodoTask[]> {
+  async getTasks(_view: TaskView, _projectId?: string): Promise<TaskPage> {
     throw new Error('VikunjaBackend.getTasks not implemented')
+  }
+  async getSubtasks(_parentId: string): Promise<TodoTask[]> {
+    throw new Error('VikunjaBackend.getSubtasks not implemented')
   }
   async completeTask(_id: string): Promise<void> {
     throw new Error('VikunjaBackend.completeTask not implemented')

@@ -54,12 +54,12 @@ export function ConnectTab() {
     setTest({ kind: 'ok' })
 
     try {
-      const [projectList, todayTasks] = await Promise.all([
+      const [projectList, todayPage] = await Promise.all([
         backend.getProjects(),
         backend.getTasks('today'),
       ])
       setProjects(projectList)
-      setTasks(todayTasks)
+      setTasks(todayPage.tasks)
 
       if (!settings.defaultProjectId) {
         const inbox = projectList.find((p) => p.name.toLowerCase() === 'inbox')
