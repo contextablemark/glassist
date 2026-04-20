@@ -32,15 +32,6 @@ export interface TodoProject {
   name: string
 }
 
-/**
- * Snapshot of a project the user has pinned to Home. Name is captured at
- * pick-time from the backend; see GlassistSettings.pinnedHomeProjects.
- */
-export interface PinnedProject {
-  id: string
-  name: string
-}
-
 export interface GlassistSettings {
   backend: BackendName
   token: string
@@ -53,16 +44,6 @@ export interface GlassistSettings {
    */
   vikunjaProxyUrl: string
   defaultProjectId?: string
-  /**
-   * Projects the user has pinned to the on-glass Home menu. Rendered as
-   * additional rows after the four built-in views (Inbox / Today /
-   * Upcoming / All tasks) in selection order. Each entry carries a
-   * backend-resolved display name snapshot taken at pick-time so the
-   * Home menu can render immediately without an extra getProjects()
-   * round-trip, and stale entries (project deleted remotely) still have
-   * a human-readable label until the user unpins.
-   */
-  pinnedHomeProjects: PinnedProject[]
   defaultHomeView: HomeView
   itemsPerPage: number
   stt: {
@@ -77,7 +58,6 @@ export const DEFAULT_SETTINGS: GlassistSettings = {
   token: '',
   vikunjaBaseUrl: 'https://app.vikunja.cloud',
   vikunjaProxyUrl: COMMUNITY_VIKUNJA_PROXY_URL,
-  pinnedHomeProjects: [],
   defaultHomeView: 'home',
   itemsPerPage: 9,
   stt: {

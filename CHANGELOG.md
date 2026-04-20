@@ -6,21 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-## [0.3.0] — 2026-04-19
-
-### Added
-
-- **Pinned projects on Home.** Users can now pick any project from their connected backend (Todoist / Vikunja) and pin it to the on-glass Home menu. Pinned rows appear after the four built-in views (Inbox / Today / Upcoming / All tasks) in the order they were picked, show live counts, and tap-drill into a project view. Soft cap at 8 pins (so Home stays comfortably under the SDK's 20-item `ListContainer` ceiling even with the voice row).
-- **GlassesTab picker.** Replaces the placeholder scaffold with a real checkbox-list UI that loads the connected backend's projects via `getProjects()`, shows pin counts, and disables unchecked rows at the cap. Empty-state when no backend is connected. Settings persist through the existing storage wrapper and fire `glassist:settings-changed` so the glasses Nav picks up the new pins without a reload.
-- **`PinnedProject`** shape on `GlassistSettings.pinnedHomeProjects` stores `{id, name}` pairs — the name snapshot is taken at pick-time so Home renders immediately without an extra `getProjects()` round-trip, and stale pins (project deleted remotely) still show a human-readable label until unpinned.
-
-### Changed
-
-- **Vikunja `getProjects()`** now formats nested-project names as parent paths ("Work › Launch" rather than a bare "Launch") by walking `parent_project_id`. Flat-list pickers on the phone no longer confuse two sibling projects under different parents. Todoist and Demo backends are unchanged.
-- **Nav home-menu model** refactored to a discriminated `HomeEntry` union (`{kind: 'view'}` vs `{kind: 'project'}`) with `Map`-keyed counts (`view:<id>` / `project:<id>`). Cleaner than the old `Partial<Record<HomeId, …>>` and survives arbitrary pin changes.
-- **`ListFrame`** now carries `view: TaskView` (widened from the built-in-only `HomeId`) plus an optional `projectId`, and `loadList()` passes `projectId` through to `backend.getTasks()`. All four backends already accept that second argument for the `'project'` view.
-- **`loadHomeCounts()`** now runs in two parallel waves — four built-in views first (preserving first-paint latency), then pinned projects. Per-project failures are logged but don't flip Nav into ERROR, so one stale or unreachable pin can't lock the user out of Home.
-
 ## [0.2.4] — 2026-04-20
 
 ### Fixed

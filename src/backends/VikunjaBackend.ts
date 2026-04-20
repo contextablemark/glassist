@@ -117,7 +117,7 @@ export class VikunjaBackend implements TodoBackend {
     const raw = await this.request<VProject[]>('/projects', {
       query: { per_page: PAGE_LIMIT },
     })
-    return buildProjectsWithPaths(raw)
+    return raw.map(mapProject)
   }
 
   async getDefaultProject(): Promise<TodoProject | null> {
@@ -286,38 +286,8 @@ export function filterForView(view: 'today' | 'upcoming' | 'all'): string | unde
   return undefined
 }
 
-/**
- * Vikunja projects can be nested via `parent_project_id`. When the phone
- * picker shows a flat list, two projects sharing a leaf name under
- * different parents are indistinguishable. Walk each project's parent
- * chain and join the titles with `›` so rows read like "Work › Launch".
- *
- * Parent-less projects keep their title as-is. Cycles are guarded by a
- * visited set (defensive — Vikunja shouldn't emit them).
- */
-export function buildProjectsWithPaths(raw: VProject[]): TodoProject[] {
-  const byId = new Map<number, VProject>()
-  for (const p of raw) {
-    if (p.id !== undefined) byId.set(p.id, p)
-  }
-  return raw
-    .filter((p) => p.id !== undefined)
-    .map((p) => ({ id: String(p.id), name: pathFor(p, byId) }))
-}
-
-function pathFor(p: VProject, byId: Map<number, VProject>): string {
-  const titles: string[] = [p.title]
-  const visited = new Set<number>()
-  if (p.id !== undefined) visited.add(p.id)
-  let cursor = p.parent_project_id
-  while (cursor !== undefined && cursor !== 0 && !visited.has(cursor)) {
-    visited.add(cursor)
-    const parent = byId.get(cursor)
-    if (!parent) break
-    titles.unshift(parent.title)
-    cursor = parent.parent_project_id
-  }
-  return titles.join(' › ')
+function mapProject(p: VProject): TodoProject {
+  return { id: String(p.id ?? ''), name: p.title }
 }
 
 function mapTask(t: VTask): TodoTask {
