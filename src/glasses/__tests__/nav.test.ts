@@ -98,6 +98,83 @@ describe('Nav', () => {
     expect(scene.items[3]).toMatch(/All tasks.*\(1\+\)/)
   })
 
+  it('pinned projects render as extra home rows after the built-in views', async () => {
+    backend.getTasks.mockImplementation(async (view: TaskView, projectId?: string) => {
+      if (view === 'project' && projectId === 'p-work') return page([task('w1', 'x'), task('w2', 'y')])
+      if (view === 'project' && projectId === 'p-home') return page([task('h1', 'x')], true)
+      return page([])
+    })
+    const settings: GlassistSettings = {
+      ...DEFAULT_SETTINGS,
+      pinnedHomeProjects: [
+        { id: 'p-work', name: 'Work' },
+        { id: 'p-home', name: 'Home' },
+      ],
+    }
+    const nav = new Nav({ backend, settings, onChange })
+    await flush()
+    const scene = expectList(nav.render())
+    // Four built-in rows + two pinned = six total.
+    expect(scene.items).toHaveLength(6)
+    expect(scene.items[4]).toMatch(/Work.*\(2\)/)
+    expect(scene.items[5]).toMatch(/Home.*\(1\+\)/)
+  })
+
+  it('tap on a pinned project row drills into a project view with the right projectId', async () => {
+    backend.getTasks.mockImplementation(async (view: TaskView, projectId?: string) => {
+      if (view === 'project' && projectId === 'p-work') {
+        return page([task('w1', 'Ship feature')])
+      }
+      return page([])
+    })
+    const settings: GlassistSettings = {
+      ...DEFAULT_SETTINGS,
+      pinnedHomeProjects: [{ id: 'p-work', name: 'Work' }],
+    }
+    const nav = new Nav({ backend, settings, onChange })
+    await flush()
+    nav.onTap(4) // Work row (after 4 built-ins at indices 0-3)
+    await flush()
+    const scene = expectList(nav.render())
+    expect(scene.header).toMatch(/Work/)
+    expect(scene.items[1]).toMatch(/Ship feature/)
+    expect(backend.getTasks).toHaveBeenCalledWith('project', 'p-work')
+  })
+
+  it('per-project count fetch failure does not set a global error', async () => {
+    backend.getTasks.mockImplementation(async (view: TaskView, projectId?: string) => {
+      if (view === 'project' && projectId === 'broken') throw new Error('gone')
+      return page([])
+    })
+    const settings: GlassistSettings = {
+      ...DEFAULT_SETTINGS,
+      pinnedHomeProjects: [{ id: 'broken', name: 'Broken' }],
+    }
+    const nav = new Nav({ backend, settings, onChange })
+    await flush()
+    // Home is still a list scene, not an error status.
+    const scene = expectList(nav.render())
+    expect(scene.items[4]).toMatch(/Broken.*\(…\)/)
+  })
+
+  it('setSettings reloads home counts when pinned projects change', async () => {
+    backend.getTasks.mockImplementation(async (view: TaskView, projectId?: string) => {
+      if (view === 'project' && projectId === 'p-new') return page([task('n1', 'x'), task('n2', 'y'), task('n3', 'z')])
+      return page([])
+    })
+    const nav = new Nav({ backend, settings: DEFAULT_SETTINGS, onChange })
+    await flush()
+    backend.getTasks.mockClear()
+    nav.setSettings({
+      ...DEFAULT_SETTINGS,
+      pinnedHomeProjects: [{ id: 'p-new', name: 'New' }],
+    })
+    await flush()
+    expect(backend.getTasks).toHaveBeenCalledWith('project', 'p-new')
+    const scene = expectList(nav.render())
+    expect(scene.items[4]).toMatch(/New.*\(3\)/)
+  })
+
   it('tap on a home menu item pushes the corresponding list', async () => {
     backend.getTasks.mockResolvedValue(page([]))
     const nav = new Nav({ backend, settings: BASE_SETTINGS, onChange })

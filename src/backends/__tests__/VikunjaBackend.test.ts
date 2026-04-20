@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   VikunjaBackend,
+  buildProjectsWithPaths,
   filterForView,
   normalizeBaseUrl,
 } from '../VikunjaBackend'
@@ -341,6 +342,65 @@ describe('normalizeBaseUrl', () => {
     expect(normalizeBaseUrl('https://v.example.com/api/v2')).toBe(
       'https://v.example.com/api/v2',
     )
+  })
+})
+
+describe('buildProjectsWithPaths', () => {
+  it('formats flat projects unchanged', () => {
+    const out = buildProjectsWithPaths([
+      { id: 1, title: 'Inbox' },
+      { id: 2, title: 'Work' },
+    ])
+    expect(out).toEqual([
+      { id: '1', name: 'Inbox' },
+      { id: '2', name: 'Work' },
+    ])
+  })
+
+  it('joins parent titles with › for nested projects', () => {
+    const out = buildProjectsWithPaths([
+      { id: 1, title: 'Work' },
+      { id: 2, title: 'Launch', parent_project_id: 1 },
+      { id: 3, title: 'Copy', parent_project_id: 2 },
+    ])
+    expect(out).toEqual([
+      { id: '1', name: 'Work' },
+      { id: '2', name: 'Work › Launch' },
+      { id: '3', name: 'Work › Launch › Copy' },
+    ])
+  })
+
+  it('treats parent_project_id=0 as no parent', () => {
+    const out = buildProjectsWithPaths([
+      { id: 7, title: 'Top', parent_project_id: 0 },
+    ])
+    expect(out[0]).toEqual({ id: '7', name: 'Top' })
+  })
+
+  it('guards against cycles', () => {
+    // Defensive — Vikunja shouldn't emit these, but we don't want to loop
+    // forever if it does.
+    const out = buildProjectsWithPaths([
+      { id: 1, title: 'A', parent_project_id: 2 },
+      { id: 2, title: 'B', parent_project_id: 1 },
+    ])
+    expect(out).toHaveLength(2)
+    for (const p of out) expect(typeof p.name).toBe('string')
+  })
+
+  it('stops when an ancestor is missing from the payload', () => {
+    const out = buildProjectsWithPaths([
+      { id: 3, title: 'Child', parent_project_id: 99 },
+    ])
+    expect(out[0]).toEqual({ id: '3', name: 'Child' })
+  })
+
+  it('drops entries without an id (malformed backend response)', () => {
+    const out = buildProjectsWithPaths([
+      { title: 'Orphan' } as never,
+      { id: 2, title: 'Work' },
+    ])
+    expect(out).toEqual([{ id: '2', name: 'Work' }])
   })
 })
 
