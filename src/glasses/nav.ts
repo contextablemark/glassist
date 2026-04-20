@@ -1,5 +1,5 @@
 import type { EvenAppBridge } from '@evenrealities/even_hub_sdk'
-import type { GlassistSettings, TodoTask } from '../types'
+import type { GlassistSettings, PinnedProject, TodoTask } from '../types'
 import type { TaskView, TodoBackend } from '../backends'
 import { renderHomeItems, type HomeMenuItem } from './render/home'
 import { renderHeader, renderListItems } from './render/list'
@@ -8,12 +8,25 @@ import { STTSession } from './stt'
 
 type HomeId = Extract<TaskView, 'today' | 'upcoming' | 'inbox' | 'all'>
 
-const HOME_MENU: { id: HomeId; label: string }[] = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'today', label: 'Today' },
-  { id: 'upcoming', label: 'Upcoming' },
-  { id: 'all', label: 'All tasks' },
+/**
+ * Entries on the Home menu. Built-in views have a fixed `HomeId` and
+ * label; pinned-project rows are derived from settings at render time.
+ */
+type HomeEntry =
+  | { kind: 'view'; id: HomeId; label: string }
+  | { kind: 'project'; projectId: string; label: string }
+
+const BUILT_IN_MENU: HomeEntry[] = [
+  { kind: 'view', id: 'inbox', label: 'Inbox' },
+  { kind: 'view', id: 'today', label: 'Today' },
+  { kind: 'view', id: 'upcoming', label: 'Upcoming' },
+  { kind: 'view', id: 'all', label: 'All tasks' },
 ]
+
+/** Stable key used for counts/hasMore maps on a HomeFrame. */
+function entryKey(entry: HomeEntry): string {
+  return entry.kind === 'view' ? `view:${entry.id}` : `project:${entry.projectId}`
+}
 
 /** Displayed as the voice quick-add row on Home when STT is enabled. */
 const SPEAK_ROW_LABEL = '+ Speak a task'
@@ -35,13 +48,20 @@ const BACK_ITEM_LABEL = '\u25b2 Back'
 
 interface HomeFrame {
   kind: 'home'
-  counts: Partial<Record<HomeId, number>>
-  hasMore: Partial<Record<HomeId, boolean>>
+  /** Keyed by `entryKey()` — `view:<id>` for built-ins, `project:<id>` for pins. */
+  counts: Map<string, number>
+  hasMore: Map<string, boolean>
 }
 
 interface ListFrame {
   kind: 'list'
-  view: HomeId
+  /**
+   * `project` needs a projectId alongside it; built-in views ignore that
+   * field. TaskView is defined in the backend interface and already
+   * includes 'project'.
+   */
+  view: TaskView
+  projectId?: string
   title: string
   tasks: TodoTask[] | null
   completedInSession: Set<string>
@@ -153,12 +173,30 @@ export class Nav {
 
   /**
    * Update settings without resetting navigation. Used when the user
-   * changes voice settings on the phone — the Home menu may gain/lose
-   * the "+ Speak a task" row, but the current list position shouldn't
-   * be disturbed.
+   * changes voice settings or pinned projects on the phone — the Home
+   * menu may gain/lose rows, but the current list position shouldn't
+   * be disturbed. When pinned projects changed and we're at Home, kick
+   * off the second-wave fetch for the new pins.
    */
   setSettings(settings: GlassistSettings): void {
+    const prevPinIds = new Set(this.settings.pinnedHomeProjects.map((p) => p.id))
+    const nextPinIds = new Set(settings.pinnedHomeProjects.map((p) => p.id))
+    const pinsChanged =
+      prevPinIds.size !== nextPinIds.size ||
+      [...nextPinIds].some((id) => !prevPinIds.has(id))
     this.settings = settings
+    // Drop counts for projects that were unpinned so the Home menu
+    // doesn't keep a stale number around if the same id is re-pinned.
+    if (pinsChanged && this.stack[0].kind === 'home') {
+      const home = this.stack[0]
+      for (const key of [...home.counts.keys()]) {
+        if (key.startsWith('project:') && !nextPinIds.has(key.slice('project:'.length))) {
+          home.counts.delete(key)
+          home.hasMore.delete(key)
+        }
+      }
+      if (this.backend) void this.loadHomeCounts()
+    }
     this.change()
   }
 
@@ -245,13 +283,28 @@ export class Nav {
     }
   }
 
+  /**
+   * The ordered list of Home menu entries: four built-in views followed
+   * by pinned projects (in the order the user picked them on the phone).
+   * Shared between render and onTap so index mapping stays in sync.
+   */
+  private homeEntries(): HomeEntry[] {
+    const pins: HomeEntry[] = this.settings.pinnedHomeProjects.map(
+      (p: PinnedProject) => ({ kind: 'project', projectId: p.id, label: p.name }),
+    )
+    return [...BUILT_IN_MENU, ...pins]
+  }
+
   private homeMenuItems(frame: HomeFrame): HomeMenuItem[] {
-    return HOME_MENU.map(({ id, label }) => ({
-      id,
-      label,
-      count: frame.counts[id] ?? null,
-      hasMore: frame.hasMore[id] ?? false,
-    }))
+    return this.homeEntries().map((entry) => {
+      const key = entryKey(entry)
+      return {
+        id: key,
+        label: entry.label,
+        count: frame.counts.get(key) ?? null,
+        hasMore: frame.hasMore.get(key) ?? false,
+      }
+    })
   }
 
   private isVoiceAvailable(): boolean {
@@ -286,22 +339,33 @@ export class Nav {
     if (f.kind === 'home') {
       if (itemIndex === undefined) return
       const voiceOn = this.isVoiceAvailable()
-      // Speak-a-task row is the first item when voice is on; the four
-      // view entries shift down by one.
+      // Speak-a-task row is the first item when voice is on; every
+      // subsequent entry shifts down by one.
       if (voiceOn && itemIndex === 0) {
         void this.startListening()
         return
       }
       const menuIndex = voiceOn ? itemIndex - 1 : itemIndex
-      const entry = HOME_MENU[menuIndex]
+      const entry = this.homeEntries()[menuIndex]
       if (!entry) return
-      this.stack.push({
-        kind: 'list',
-        view: entry.id,
-        title: entry.label,
-        tasks: null,
-        completedInSession: new Set(),
-      })
+      if (entry.kind === 'view') {
+        this.stack.push({
+          kind: 'list',
+          view: entry.id,
+          title: entry.label,
+          tasks: null,
+          completedInSession: new Set(),
+        })
+      } else {
+        this.stack.push({
+          kind: 'list',
+          view: 'project',
+          projectId: entry.projectId,
+          title: entry.label,
+          tasks: null,
+          completedInSession: new Set(),
+        })
+      }
       this.change()
       void this.loadList()
       return
@@ -381,6 +445,8 @@ export class Nav {
     const home = this.stack[0]
     if (home.kind !== 'home') return
     const views: HomeId[] = ['today', 'upcoming', 'inbox', 'all']
+    // Wave 1: built-in views in parallel. These drive first-paint so a
+    // slow pinned project doesn't stall the rest of Home.
     await Promise.all(
       views.map(async (view) => {
         try {
@@ -394,12 +460,31 @@ export class Nav {
             this.knownParentIds = parentIds
           }
           const topLevel = page.tasks.filter((t) => !t.parentId)
-          home.counts = { ...home.counts, [view]: topLevel.length }
-          home.hasMore = { ...home.hasMore, [view]: page.hasMore }
+          home.counts.set(`view:${view}`, topLevel.length)
+          home.hasMore.set(`view:${view}`, page.hasMore)
           this.change()
         } catch (err) {
-          this.log(`loadHomeCounts ${view} ERROR: ${describeError(err)}`)
+          this.log(`loadHomeCounts view:${view} ERROR: ${describeError(err)}`)
           this.setError(err)
+        }
+      }),
+    )
+    // Wave 2: pinned project counts. Failures are logged but do NOT flip
+    // Nav into ERROR — one stale or unreachable pin shouldn't lock the
+    // user out of Home. The row just stays at "…".
+    const pins = this.settings.pinnedHomeProjects
+    if (pins.length === 0) return
+    await Promise.all(
+      pins.map(async (pin: PinnedProject) => {
+        try {
+          const page = await backend.getTasks('project', pin.id)
+          if (this.stack[0] !== home) return
+          const topLevel = page.tasks.filter((t) => !t.parentId)
+          home.counts.set(`project:${pin.id}`, topLevel.length)
+          home.hasMore.set(`project:${pin.id}`, page.hasMore)
+          this.change()
+        } catch (err) {
+          this.log(`loadHomeCounts project:${pin.id} ERROR: ${describeError(err)}`)
         }
       }),
     )
@@ -411,7 +496,7 @@ export class Nav {
     const frame = this.top
     if (frame.kind !== 'list') return
     try {
-      const { tasks } = await backend.getTasks(frame.view)
+      const { tasks } = await backend.getTasks(frame.view, frame.projectId)
       if (this.top !== frame) return
       frame.tasks = tasks.filter((t) => !t.parentId)
       this.change()
@@ -606,7 +691,7 @@ export class Nav {
 }
 
 function blankHome(): HomeFrame {
-  return { kind: 'home', counts: {}, hasMore: {} }
+  return { kind: 'home', counts: new Map(), hasMore: new Map() }
 }
 
 function describeError(err: unknown): string {
