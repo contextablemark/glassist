@@ -37,7 +37,11 @@ export function GlassesTab() {
       try {
         const backend = await makeBackend(settings)
         const list = await backend.getProjects()
-        if (!cancelled) setProjects({ kind: 'ok', projects: list })
+        // The built-in Inbox row already covers the user's inbox — both
+        // Todoist and Vikunja expose it as a project named "Inbox", but
+        // pinning it here would just duplicate the existing Home row.
+        const pickable = list.filter((p) => p.name.trim().toLowerCase() !== 'inbox')
+        if (!cancelled) setProjects({ kind: 'ok', projects: pickable })
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : String(err)

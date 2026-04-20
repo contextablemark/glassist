@@ -20,6 +20,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Nav home-menu model** refactored to a discriminated `HomeEntry` union (`{kind: 'view'}` vs `{kind: 'project'}`) with `Map`-keyed counts (`view:<id>` / `project:<id>`). Cleaner than the old `Partial<Record<HomeId, …>>` and survives arbitrary pin changes.
 - **`ListFrame`** now carries `view: TaskView` (widened from the built-in-only `HomeId`) plus an optional `projectId`, and `loadList()` passes `projectId` through to `backend.getTasks()`. All four backends already accept that second argument for the `'project'` view.
 - **`loadHomeCounts()`** now runs in two parallel waves — four built-in views first (preserving first-paint latency), then pinned projects. Per-project failures are logged but don't flip Nav into ERROR, so one stale or unreachable pin can't lock the user out of Home.
+- **GlassesTab picker hides "Inbox" projects** — both Todoist and Vikunja surface the user's inbox as a project named "Inbox", but the built-in Home row already covers it. Pinning it would just duplicate the row.
+- **Switching the backend picker clears `pinnedHomeProjects` and `defaultProjectId`.** Project IDs are backend-specific (Todoist alphanumeric, Vikunja numeric), so a pin carried across a backend switch resolves to nothing and 400s on every Home refresh. Clearing on switch is the simplest path; users re-pick after reconnecting to the new backend.
 
 ## [0.2.4] — 2026-04-20
 

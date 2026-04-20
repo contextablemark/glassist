@@ -29,6 +29,14 @@ export function ConnectTab() {
   ): void {
     setSettings((prev) => {
       const next = { ...prev, [key]: value }
+      // Project IDs are backend-specific — a Todoist `6CrfF29RjwF67x9f`
+      // won't resolve on Vikunja (and vice versa). Clearing pins and the
+      // default project on backend switch is the simplest path; users
+      // re-pick after reconnecting.
+      if (key === 'backend' && value !== prev.backend) {
+        next.pinnedHomeProjects = []
+        next.defaultProjectId = undefined
+      }
       void saveSettings(next)
       return next
     })
