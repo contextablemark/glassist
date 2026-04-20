@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-04-20
+
+### Fixed
+
+- **Vercel deploy failed with `ERESOLVE`** after `even-toolkit@1.7.2` tightened its peer requirement to `@evenrealities/even_hub_sdk@>=0.0.10`. Local `ehpk` builds kept working off the existing lockfile, but Vercel's fresh install enforces peers strictly. Bumped `@evenrealities/even_hub_sdk` to `^0.0.10` to satisfy the peer cleanly.
+
 ## [0.2.3] — 2026-04-19
 
 ### Fixed

@@ -1,6 +1,6 @@
 {
   "name": "glassist",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@doist/todoist-sdk": "^9.3.0",
-    "@evenrealities/even_hub_sdk": "^0.0.9",
+    "@evenrealities/even_hub_sdk": "^0.0.10",
     "even-toolkit": "^1.7.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
